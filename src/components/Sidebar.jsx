@@ -1,14 +1,15 @@
-import React from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+
+import { getAuthStatus } from '../utils/auth';
+import { menuItems } from '../pages/shared/MenuData';
 import clsx from 'clsx';
 
-const SidebarItem = ({ to, icon, label, activeIconStyle }) => {
-    const location = useLocation();
-    const isActive = location.pathname === to;
-
+const SidebarItem = ({ to, icon, label, onClick, isActive }) => {
     return (
         <Link
             to={to}
+            onClick={onClick}
             className={clsx(
                 "flex items-center gap-3 px-3 py-2 rounded-lg transition-colors",
                 isActive
@@ -18,7 +19,7 @@ const SidebarItem = ({ to, icon, label, activeIconStyle }) => {
         >
             <span
                 className={clsx("material-symbols-outlined", isActive ? "text-eva-blue" : "text-gray-700 dark:text-gray-300")}
-                style={isActive && activeIconStyle ? { fontVariationSettings: "'FILL' 1" } : {}}
+                style={isActive ? { fontVariationSettings: "'FILL' 1" } : {}}
             >
                 {icon}
             </span>
@@ -30,6 +31,35 @@ const SidebarItem = ({ to, icon, label, activeIconStyle }) => {
 };
 
 const Sidebar = () => {
+    const { user } = getAuthStatus();
+    const role = user?.role;
+
+    const location = useLocation(); 
+
+    const [activeItem, setActiveItem] = useState("");
+    const items = menuItems[role] || [];
+
+    useEffect(() => {
+        if (items.length > 0) {
+            const currentPath = location.pathname;
+            const currentActiveItem = items.find(item => currentPath.includes(item.url));
+            setActiveItem(currentActiveItem ? currentActiveItem.name : "Home");
+        }
+    }, [location.pathname, items]);
+
+    const handleLogout = () => {
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+    };
+
+    const handleMenuItemClick = (itemName) => {
+        if (itemName === "Logout") {
+            handleLogout();
+        } else {
+            setActiveItem(itemName);
+        }
+    };
+
     return (
         <div className="flex flex-col border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-background-dark w-64 p-4 shrink-0 h-screen sticky top-0">
             <div className="flex flex-col justify-between h-full">
@@ -45,14 +75,24 @@ const Sidebar = () => {
                         </div>
                     </div>
                     <div className="flex flex-col gap-2 mt-4">
-                        <SidebarItem to="/" icon="dashboard" label="Dashboard" />
+                        {items.map((item, index) => (
+                            <SidebarItem
+                                key={index}
+                                to={item.url}
+                                icon={item.icon}
+                                label={item.name}
+                                onClick={() => handleMenuItemClick(item.name)}
+                                isActive={activeItem === item.name}
+                            />
+                        ))}
+                        {/* <SidebarItem to="/" icon="dashboard" label="Dashboard" />
                         <SidebarItem to="/inventory" icon="inventory_2" label="Inventory" />
                         <SidebarItem to="/distributors" icon="groups" label="Distributors" activeIconStyle />
                         <SidebarItem to="/sales" icon="receipt_long" label="Sales and Report" />
                         <SidebarItem to="/financials" icon="monitoring" label="Financials" />
                         <SidebarItem to="/production" icon="precision_manufacturing" label="Production" />
                         <SidebarItem to="/warehouse" icon="warehouse" label="Warehouse" />
-                        <SidebarItem to="/employee" icon="badge" label="Employee & HR" activeIconStyle />
+                        <SidebarItem to="/employee" icon="badge" label="Employee & HR" activeIconStyle /> */}
                     </div>
                 </div>
                 <div className="flex flex-col gap-1">
@@ -60,9 +100,9 @@ const Sidebar = () => {
                         <span className="material-symbols-outlined">settings</span>
                         <p className="text-sm font-medium leading-normal">Settings</p>
                     </a>
-                    <a className="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" href="#">
-                        <span className="material-symbols-outlined">help</span>
-                        <p className="text-sm font-medium leading-normal">Help</p>
+                    <a className="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" href="#" onClick={handleLogout}>
+                        <span className="material-symbols-outlined">Logout</span>
+                        <p className="text-sm font-medium leading-normal">Logout</p>
                     </a>
                 </div>
             </div>
