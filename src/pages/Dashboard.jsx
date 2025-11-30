@@ -1,6 +1,5 @@
-import React from 'react';
-
 const Dashboard = () => {
+    
     return (
         <div className="flex-1 overflow-y-auto">
             <header className="flex items-center justify-between whitespace-nowrap border-b border-solid border-gray-200 px-8 py-4 dark:border-gray-800">
