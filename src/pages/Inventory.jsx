@@ -1,17 +1,46 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useInventory } from '../context/InventoryContext';
+import PurchaseModal from '../components/PurchaseModal';
+import ApprovalModal from '../components/ApprovalModal';
+import ItemHistoryModal from '../components/ItemHistoryModal';
+
+import CreateItemModal from '../components/CreateItemModal';
 
 const Inventory = () => {
+    const { inventoryItems, pendingItems } = useInventory();
     const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [approvalItem, setApprovalItem] = useState(null);
+    const [historyItemName, setHistoryItemName] = useState(null);
     const [activeTab, setActiveTab] = useState('raw_materials');
+    const [role, setRole] = useState('accountant'); // Default fallback
+
+    useEffect(() => {
+        const userStr = localStorage.getItem('user');
+        if (userStr) {
+            const user = JSON.parse(userStr);
+            setRole(user.role);
+        }
+    }, []);
 
     const handlePurchaseClick = () => {
         setIsPurchaseModalOpen(true);
     };
 
-    const handleConfirmPurchase = () => {
-        setIsPurchaseModalOpen(false);
-        alert('Stock purchase order created successfully!');
+    const handleCreateClick = () => {
+        setIsCreateModalOpen(true);
     };
+
+    const handleApproveClick = (item) => {
+        setApprovalItem(item);
+    };
+
+    const handleItemClick = (itemName) => {
+        setHistoryItemName(itemName);
+    };
+
+    const filteredInventory = inventoryItems.filter(item => item.category === activeTab);
+    const filteredPending = pendingItems.filter(item => item.category === activeTab);
 
     return (
         <div className="flex-1 overflow-y-auto p-8">
@@ -22,6 +51,7 @@ const Inventory = () => {
                         Inventory Management
                     </h1>
                     <button
+                        onClick={handleCreateClick}
                         className="flex items-center justify-center gap-2 overflow-hidden rounded-lg h-10 px-4 bg-eva-blue text-white text-sm font-bold leading-normal tracking-[0.015em] hover:bg-blue-800 transition-colors">
                         <span className="material-symbols-outlined text-base">add</span>
                         <span className="truncate">Create New Item</span>
@@ -75,7 +105,48 @@ const Inventory = () => {
                     </button>
                 </div>
 
-                {/* Table */}
+                {/* Pending Approvals (Admin Only) */}
+                {role === 'admin' && filteredPending.length > 0 && (
+                    <div className="mb-8">
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                            <span className="material-symbols-outlined text-orange-500">pending_actions</span>
+                            Pending Approvals
+                        </h2>
+                        <div className="overflow-hidden rounded-lg border border-orange-200 bg-orange-50 dark:bg-orange-900/10 dark:border-orange-800">
+                            <table className="w-full text-left">
+                                <thead className="bg-orange-100 dark:bg-orange-900/20">
+                                    <tr className="border-b border-orange-200 dark:border-orange-800">
+                                        <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Item Name</th>
+                                        <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Quantity</th>
+                                        <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Supplier</th>
+                                        <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Date</th>
+                                        <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-orange-200 dark:divide-orange-800">
+                                    {filteredPending.map((item) => (
+                                        <tr key={item.id}>
+                                            <td className="px-4 py-3 text-slate-900 dark:text-white text-sm">{item.name}</td>
+                                            <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">{item.quantity} {item.unit}</td>
+                                            <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">{item.supplier || '-'}</td>
+                                            <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">{new Date(item.createdAt).toLocaleDateString()}</td>
+                                            <td className="px-4 py-3 text-sm">
+                                                <button
+                                                    onClick={() => handleApproveClick(item)}
+                                                    className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold bg-eva-blue text-white hover:bg-blue-800 transition-colors"
+                                                >
+                                                    Approve & Price
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
+                {/* Main Inventory Table */}
                 <div className="mt-2">
                     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:bg-background-dark dark:border-gray-700">
                         <table className="w-full text-left">
@@ -83,139 +154,99 @@ const Inventory = () => {
                                 <tr className="border-b border-slate-200 dark:border-gray-700">
                                     <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Item Name</th>
                                     <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Current Quantity</th>
-                                    <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Unit Value</th>
-                                    <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Total Value</th>
+                                    {role === 'admin' && (
+                                        <>
+                                            {/* Unit Value Removed */}
+                                            <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Total Value</th>
+                                        </>
+                                    )}
                                     <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Status</th>
                                     <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-200 dark:divide-gray-700">
-                                <tr>
-                                    <td className="h-[72px] px-4 py-2 text-slate-900 dark:text-white text-sm">PET Preforms (1L)</td>
-                                    <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">150,000 units</td>
-                                    <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">₹0.85</td>
-                                    <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">₹127,500.00</td>
-                                    <td className="h-[72px] px-4 py-2 text-sm">
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">In Stock</span>
-                                    </td>
-                                    <td className="h-[72px] px-4 py-2 text-sm">
-                                        <button className="font-medium text-eva-blue hover:underline">Adjustment Entry</button>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td className="h-[72px] px-4 py-2 text-slate-900 dark:text-white text-sm">Bottle Caps</td>
-                                    <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">450,000 units</td>
-                                    <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">₹0.15</td>
-                                    <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">₹67,500.00</td>
-                                    <td className="h-[72px] px-4 py-2 text-sm">
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">In Stock</span>
-                                    </td>
-                                    <td className="h-[72px] px-4 py-2 text-sm">
-                                        <button className="font-medium text-eva-blue hover:underline">Adjustment Entry</button>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td className="h-[72px] px-4 py-2 text-slate-900 dark:text-white text-sm">Labels (EVA Brand)</td>
-                                    <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">85,000 units</td>
-                                    <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">₹0.30</td>
-                                    <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">₹25,500.00</td>
-                                    <td className="h-[72px] px-4 py-2 text-sm">
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">In Stock</span>
-                                    </td>
-                                    <td className="h-[72px] px-4 py-2 text-sm">
-                                        <button className="font-medium text-eva-blue hover:underline">Adjustment Entry</button>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td className="h-[72px] px-4 py-2 text-slate-900 dark:text-white text-sm">Cardboard Boxes</td>
-                                    <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">4,800 units</td>
-                                    <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">₹12.50</td>
-                                    <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">₹60,000.00</td>
-                                    <td className="h-[72px] px-4 py-2 text-sm">
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300">Low Stock</span>
-                                    </td>
-                                    <td className="h-[72px] px-4 py-2 text-sm">
-                                        <button className="font-medium text-eva-blue hover:underline">Adjustment Entry</button>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td className="h-[72px] px-4 py-2 text-slate-900 dark:text-white text-sm">Purified Water</td>
-                                    <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">50,000 L</td>
-                                    <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">₹1.20</td>
-                                    <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">₹60,000.00</td>
-                                    <td className="h-[72px] px-4 py-2 text-sm">
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">In Stock</span>
-                                    </td>
-                                    <td className="h-[72px] px-4 py-2 text-sm">
-                                        <button className="font-medium text-eva-blue hover:underline">Adjustment Entry</button>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td className="h-[72px] px-4 py-2 text-slate-900 dark:text-white text-sm">CO2 Cylinder</td>
-                                    <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">12 units</td>
-                                    <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">₹1,500.00</td>
-                                    <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">₹18,000.00</td>
-                                    <td className="h-[72px] px-4 py-2 text-sm">
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">Out of Stock</span>
-                                    </td>
-                                    <td className="h-[72px] px-4 py-2 text-sm">
-                                        <button className="font-medium text-eva-blue hover:underline">Adjustment Entry</button>
-                                    </td>
-                                </tr>
+                                {filteredInventory.map((item) => (
+                                    <tr key={item.id}>
+                                        <td className="h-[72px] px-4 py-2 text-slate-900 dark:text-white text-sm">
+                                            <button
+                                                onClick={() => handleItemClick(item.name)}
+                                                className="font-bold text-eva-blue hover:underline text-left"
+                                            >
+                                                {item.name}
+                                            </button>
+                                        </td>
+                                        <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">{item.quantity} {item.unit}</td>
+                                        {role === 'admin' && (
+                                            <>
+                                                {/* Unit Value Removed */}
+                                                <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">₹{item.totalValue.toLocaleString()}</td>
+                                            </>
+                                        )}
+                                        <td className="h-[72px] px-4 py-2 text-sm">
+                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                                ${item.status === 'In Stock' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
+                                                    item.status === 'Low Stock' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300' :
+                                                        item.status === 'Out of Stock' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' :
+                                                            'bg-gray-100 text-gray-800'}`}>
+                                                {item.status}
+                                            </span>
+                                        </td>
+                                        <td className="h-[72px] px-4 py-2 text-sm">
+                                            <button className="font-medium text-eva-blue hover:underline">Adjustment Entry</button>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {/* Show pending items for accountant in the main list as requested, but maybe with a different status?
+                                    The prompt said "when an entry is added it should show in the list on the inventory page".
+                                    I'll add them here for Accountant view with "Pending" status and hidden price.
+                                */}
+                                {role === 'accountant' && filteredPending.map((item) => (
+                                    <tr key={item.id} className="bg-slate-50/50 dark:bg-slate-800/50">
+                                        <td className="h-[72px] px-4 py-2 text-slate-900 dark:text-white text-sm">
+                                            {item.name}
+                                            <span className="ml-2 text-xs text-orange-500 font-medium">(Pending)</span>
+                                        </td>
+                                        <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">{item.quantity} {item.unit}</td>
+                                        {/* Pricing columns hidden for accountant */}
+                                        <td className="h-[72px] px-4 py-2 text-sm">
+                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400">
+                                                Pending Approval
+                                            </span>
+                                        </td>
+                                        <td className="h-[72px] px-4 py-2 text-sm">
+                                            <span className="text-slate-400 italic text-xs">Awaiting Admin</span>
+                                        </td>
+                                    </tr>
+                                ))}
                             </tbody>
                         </table>
                     </div>
                 </div>
             </div>
 
-            {/* Purchase Stock Modal */}
-            {isPurchaseModalOpen && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-800">
-                        <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
-                            <h3 className="text-xl font-bold text-slate-900 dark:text-white">Purchase Stock</h3>
-                            <button onClick={() => setIsPurchaseModalOpen(false)} className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
-                                <span className="material-symbols-outlined">close</span>
-                            </button>
-                        </div>
-                        <div className="p-6 space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Item Name</label>
-                                <select className="w-full rounded-lg border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-primary focus:border-primary">
-                                    <option>PET Preforms (1L)</option>
-                                    <option>Bottle Caps</option>
-                                    <option>Labels (EVA Brand)</option>
-                                    <option>Cardboard Boxes</option>
-                                    <option>Purified Water</option>
-                                    <option>CO2 Cylinder</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Supplier</label>
-                                <input type="text" className="w-full rounded-lg border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-primary focus:border-primary" placeholder="Enter supplier name" />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Quantity</label>
-                                    <input type="number" className="w-full rounded-lg border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-primary focus:border-primary" placeholder="0" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Unit Cost</label>
-                                    <input type="number" className="w-full rounded-lg border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-primary focus:border-primary" placeholder="0.00" />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Total Cost</label>
-                                <input type="text" readOnly className="w-full rounded-lg border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 cursor-not-allowed" value="$0.00" />
-                            </div>
-                        </div>
-                        <div className="p-6 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-3">
-                            <button onClick={() => setIsPurchaseModalOpen(false)} className="px-4 py-2 rounded-lg text-sm font-semibold bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200">Cancel</button>
-                            <button onClick={handleConfirmPurchase} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary hover:bg-primary/90 text-white">Confirm Purchase</button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <PurchaseModal
+                isOpen={isPurchaseModalOpen}
+                onClose={() => setIsPurchaseModalOpen(false)}
+                role={role}
+            />
+
+            <CreateItemModal
+                isOpen={isCreateModalOpen}
+                onClose={() => setIsCreateModalOpen(false)}
+            />
+
+            <ApprovalModal
+                isOpen={!!approvalItem}
+                onClose={() => setApprovalItem(null)}
+                item={approvalItem}
+            />
+
+            <ItemHistoryModal
+                isOpen={!!historyItemName}
+                onClose={() => setHistoryItemName(null)}
+                itemName={historyItemName}
+                role={role}
+            />
         </div>
     );
 };

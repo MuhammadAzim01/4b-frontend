@@ -1,6 +1,7 @@
 import { RouterProvider } from 'react-router-dom';
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';;
 import { ModalProvider } from './context/ModalContext';
+import { InventoryProvider } from './context/InventoryContext';
 
 import Router from './router/Router';
 
@@ -11,7 +12,9 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ModalProvider>
-        <RouterProvider router={Router} />
+        <InventoryProvider>
+          <RouterProvider router={Router} />
+        </InventoryProvider>
       </ModalProvider>
     </QueryClientProvider>
   );
