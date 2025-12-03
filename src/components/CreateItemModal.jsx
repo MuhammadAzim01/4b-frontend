@@ -1,8 +1,25 @@
 import React, { useState } from 'react';
+
+import { useCreateUpdateMutation } from '../hooks/useCreateUpdateMutation';
+import { fetchWithAuth } from '../utils/fetchApis';
 import { useInventory } from '../context/InventoryContext';
 
 const CreateItemModal = ({ isOpen, onClose }) => {
     const { addNewItem } = useInventory();
+
+    const addItemMutation = useCreateUpdateMutation({
+        url: `inventory/items/`,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        fetchFunction: fetchWithAuth,
+        onSuccessMessage: 'Item Successfully Added',
+        onErrorMessage: 'Failed to Add Item',
+        onSuccess: () => {
+            setTimeout(() => {
+                window.location.reload();
+            }, 300);
+        },
+    });
     const [formData, setFormData] = useState({
         name: '',
         category: 'raw_materials',
@@ -23,6 +40,7 @@ const CreateItemModal = ({ isOpen, onClose }) => {
             return;
         }
         addNewItem(formData);
+        addItemMutation.mutate(JSON.stringify(formData));
         alert('New item created successfully!');
         setFormData({
             name: '',
