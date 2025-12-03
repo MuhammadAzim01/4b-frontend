@@ -49,7 +49,7 @@ const Sidebar = () => {
 
     const handleLogout = () => {
         localStorage.removeItem('user');
-        window.location.href = '/login';
+        window.location.href = '/';
     };
 
     const handleMenuItemClick = (itemName) => {
