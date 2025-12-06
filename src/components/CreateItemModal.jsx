@@ -94,7 +94,7 @@ const CreateItemModal = ({ isOpen, onClose }) => {
                         >
                             <option value="units">Units</option>
                             <option value="kg">Kg</option>
-                            <option value="L">Liters</option>
+                            <option value="l">Liters</option>
                             <option value="m">Meters</option>
                             <option value="pcs">Pieces</option>
                         </select>
