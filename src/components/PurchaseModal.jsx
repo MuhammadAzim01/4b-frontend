@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { useInventory } from '../context/InventoryContext';
 
-const PurchaseModal = ({ isOpen, onClose, role }) => {
-    const { addStockRequest, addDirectStock, inventoryItems } = useInventory();
+import { useCreateUpdateMutation } from '../hooks/useCreateUpdateMutation';
+import { useFetchQuery } from '../hooks/useFetchQuery';
+import { fetchWithAuth } from '../utils/fetchApis';
+
+const PurchaseModal = ({ isOpen, onClose, role, onOpenCreateModal }) => {
     const [formData, setFormData] = useState({
         name: '',
         supplier: '',
@@ -11,26 +13,75 @@ const PurchaseModal = ({ isOpen, onClose, role }) => {
         category: 'raw_materials',
         note: ''
     });
-    const [isCustomItem, setIsCustomItem] = useState(false);
+    const [isCustomSupplier, setIsCustomSupplier] = useState(false);
+    
+    const addItemTransactionMutation = useCreateUpdateMutation({
+        url: `inventory/transactions/`,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        fetchFunction: fetchWithAuth,
+        onSuccessMessage: 'Transaction Successfully Added',
+        onErrorMessage: 'Failed to Add Transaction',
+        onSuccess: () => {
+            setTimeout(() => {
+                window.location.reload();
+            }, 300);
+        },
+    });
+    // Filter items based on selected category
+    const { data, isFetching, isError, error } = useFetchQuery({
+        url: `inventory/items/?category=${formData.category}`,
+        queryKey: ['items', formData.category],
+        fetchFunction: fetchWithAuth,
+        enabled: !!formData.category && isOpen,
+        staleTime: 5 * 60 * 1000,
+    });
+
+    const { data: suppliersResult } = useFetchQuery({
+        url: `inventory/suppliers/`,
+        queryKey: ['suppliers'],
+        fetchFunction: fetchWithAuth,
+        enabled: !!formData.category && isOpen,
+        staleTime: 5 * 60 * 1000,
+    });
+
+    
+    
+    const suppliers = suppliersResult?.results || [];
+
+    const categoryItems = data?.results.map(item => ({ id: item.id, name: item.name })) || [];
 
     if (!isOpen) return null;
-
-    // Filter items based on selected category
-    const categoryItems = inventoryItems.filter(item => item.category === formData.category);
+    
 
     const handleChange = (e) => {
         const { name, value } = e.target;
 
         if (name === 'category') {
             setFormData(prev => ({ ...prev, [name]: value, name: '' }));
-            setIsCustomItem(false);
         } else if (name === 'itemSelect') {
             if (value === 'others') {
-                setIsCustomItem(true);
-                setFormData(prev => ({ ...prev, name: '' }));
+                onClose();
+                if (onOpenCreateModal) {
+                    onOpenCreateModal();
+                }
             } else {
-                setIsCustomItem(false);
                 setFormData(prev => ({ ...prev, name: value }));
+            }
+        } else {
+            setFormData(prev => ({ ...prev, [name]: value }));
+        }
+    };
+
+    const handleSupplierChange = (e) => {
+        const { name, value } = e.target;
+        if (name === 'supplierSelect') {
+            if (value === 'others') {
+                setFormData(prev => ({ ...prev, supplier: '' }));
+                setIsCustomSupplier(true);
+            } else {
+                setIsCustomSupplier(false);
+                setFormData(prev => ({ ...prev, supplier: value }));
             }
         } else {
             setFormData(prev => ({ ...prev, [name]: value }));
@@ -39,22 +90,14 @@ const PurchaseModal = ({ isOpen, onClose, role }) => {
 
     const handleSubmit = () => {
         const newItem = {
-            name: formData.name,
+            item: formData.name,
             supplier: formData.supplier,
             quantity: Number(formData.quantity),
-            unitValue: role === 'admin' ? Number(formData.unitValue) : 0,
-            unit: 'units', // Default unit for now
-            category: formData.category,
-            note: formData.note
+            unit_cost: role === 'admin' ? Number(formData.unitValue) : 0,
+            notes: formData.note
         };
 
-        if (role === 'admin') {
-            addDirectStock(newItem);
-            alert('Stock purchased successfully!');
-        } else {
-            addStockRequest(newItem);
-            alert('Stock request added to pending list.');
-        }
+        addItemTransactionMutation.mutate(JSON.stringify(newItem));
         onClose();
     };
 
@@ -90,38 +133,41 @@ const PurchaseModal = ({ isOpen, onClose, role }) => {
                         <select
                             name="itemSelect"
                             onChange={handleChange}
-                            value={isCustomItem ? 'others' : formData.name}
+                            value={formData.name}
                             className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white dark:bg-background-dark dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-eva-blue focus:border-transparent outline-none transition mb-2"
                         >
                             <option value="">Select Item</option>
                             {categoryItems.map(item => (
-                                <option key={item.id} value={item.name}>{item.name}</option>
+                                <option key={item.id} value={item.id}>{item.name}</option>
                             ))}
                             <option value="others">Others (Custom)</option>
                         </select>
-
-                        {isCustomItem && (
-                            <input
-                                type="text"
-                                name="name"
-                                value={formData.name}
-                                onChange={handleChange}
-                                className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white dark:bg-background-dark dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-eva-blue focus:border-transparent outline-none transition"
-                                placeholder="Enter custom item name"
-                            />
-                        )}
                     </div>
 
                     <div>
                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Supplier</label>
-                        <input
-                            type="text"
-                            name="supplier"
-                            value={formData.supplier}
-                            onChange={handleChange}
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white dark:bg-background-dark dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-eva-blue focus:border-transparent outline-none transition"
+                        <select
+                            name="supplierSelect"
+                            onChange={handleSupplierChange}
+                            value={isCustomSupplier ? 'others' : formData.supplier}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white dark:bg-background-dark dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-eva-blue focus:border-transparent outline-none transition mb-2"
+                        >
+                            <option value="">Select Supplier</option>
+                            {suppliers.map(supplier => (
+                                <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+                            ))}
+                            <option value="others">Others (Custom)</option>
+                        </select>
+                        {isCustomSupplier && (
+                            <input
+                                type="text"
+                                name="supplier"
+                                value={formData.supplier}
+                                onChange={handleSupplierChange}
+                                className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white dark:bg-background-dark dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-eva-blue focus:border-transparent outline-none transition"
                             placeholder="Enter supplier name"
                         />
+                        )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
@@ -131,6 +177,7 @@ const PurchaseModal = ({ isOpen, onClose, role }) => {
                                 type="number"
                                 name="quantity"
                                 value={formData.quantity}
+                                min={0}
                                 onChange={handleChange}
                                 className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white dark:bg-background-dark dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-eva-blue focus:border-transparent outline-none transition"
                                 placeholder="0"
@@ -143,6 +190,7 @@ const PurchaseModal = ({ isOpen, onClose, role }) => {
                                     type="number"
                                     name="unitValue"
                                     value={formData.unitValue}
+                                    min={0}
                                     onChange={handleChange}
                                     className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white dark:bg-background-dark dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-eva-blue focus:border-transparent outline-none transition"
                                     placeholder="0.00"

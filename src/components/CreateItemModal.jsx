@@ -2,11 +2,8 @@ import React, { useState } from 'react';
 
 import { useCreateUpdateMutation } from '../hooks/useCreateUpdateMutation';
 import { fetchWithAuth } from '../utils/fetchApis';
-import { useInventory } from '../context/InventoryContext';
 
 const CreateItemModal = ({ isOpen, onClose }) => {
-    const { addNewItem } = useInventory();
-
     const addItemMutation = useCreateUpdateMutation({
         url: `inventory/items/`,
         method: 'POST',
@@ -39,7 +36,6 @@ const CreateItemModal = ({ isOpen, onClose }) => {
             alert('Item name is required');
             return;
         }
-        addNewItem(formData);
         addItemMutation.mutate(JSON.stringify(formData));
         alert('New item created successfully!');
         setFormData({

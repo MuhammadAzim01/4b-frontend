@@ -1,18 +1,33 @@
 import React, { useState } from 'react';
-import { useInventory } from '../context/InventoryContext';
 
-const ApprovalModal = ({ isOpen, onClose, item }) => {
-    const { approveStockRequest } = useInventory();
+import { useCreateUpdateMutation } from '../hooks/useCreateUpdateMutation';
+import { fetchWithAuth } from '../utils/fetchApis';
+
+const ApprovalModal = ({ isOpen, onClose, entry }) => {
     const [unitValue, setUnitValue] = useState('');
 
-    if (!isOpen || !item) return null;
-
+    const approveTransactionMutation = useCreateUpdateMutation({
+        url: `inventory/transactions/${entry?.id}/`,
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        fetchFunction: fetchWithAuth,
+        onSuccessMessage: "Transaction Successfully Approved",
+        onErrorMessage: "Failed to Approve Transaction",
+        onSuccess: () => {
+            setTimeout(() => {
+                window.location.reload();
+            }, 500);
+            onClose();
+        },
+    });
+    
     const handleSubmit = () => {
-        approveStockRequest(item.id, { unitValue: Number(unitValue) });
-        onClose();
+        approveTransactionMutation.mutate(JSON.stringify({ unit_cost: Number(unitValue) }));
     };
+    
+    if (!isOpen || !entry) return null;
 
-    const totalCost = (item.quantity * Number(unitValue)).toFixed(2);
+    const totalCost = (entry.quantity * Number(unitValue)).toFixed(2);
 
     return (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -26,15 +41,15 @@ const ApprovalModal = ({ isOpen, onClose, item }) => {
                 <div className="p-6 space-y-4">
                     <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg">
                         <p className="text-sm text-slate-500 dark:text-slate-400">Item</p>
-                        <p className="font-medium text-slate-900 dark:text-white">{item.name}</p>
+                        <p className="font-medium text-slate-900 dark:text-white">{entry.item.name}</p>
                         <div className="mt-2 flex justify-between">
                             <div>
                                 <p className="text-sm text-slate-500 dark:text-slate-400">Quantity</p>
-                                <p className="font-medium text-slate-900 dark:text-white">{item.quantity} {item.unit}</p>
+                                <p className="font-medium text-slate-900 dark:text-white">{entry.quantity} {entry.item.unit}</p>
                             </div>
                             <div>
                                 <p className="text-sm text-slate-500 dark:text-slate-400">Supplier</p>
-                                <p className="font-medium text-slate-900 dark:text-white">{item.supplier || 'N/A'}</p>
+                                <p className="font-medium text-slate-900 dark:text-white">{entry.supplier?.name || 'N/A'}</p>
                             </div>
                         </div>
                     </div>
