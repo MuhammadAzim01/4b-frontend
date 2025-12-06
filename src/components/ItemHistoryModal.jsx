@@ -1,15 +1,18 @@
-
-import React from 'react';
-import { useInventory } from '../context/InventoryContext';
+import { fetchWithAuth } from '../utils/fetchApis';
+import { useFetchQuery } from '../hooks/useFetchQuery';
 
 const ItemHistoryModal = ({ isOpen, onClose, itemName, role }) => {
-    const { stockHistory } = useInventory();
+    const { data, isFetching, isError, error } = useFetchQuery({
+        url: `inventory/transactions/?item=${itemName}&status=approve`,
+        queryKey: [`transactions-${itemName}`],
+        fetchFunction: fetchWithAuth,
+        enabled: !!itemName && isOpen,
+    });
 
     if (!isOpen || !itemName) return null;
 
-    // Filter history for this item
-    const history = stockHistory.filter(item => item.itemName === itemName).sort((a, b) => new Date(b.date) - new Date(a.date));
-
+    const stockHistory = data?.results || [];
+    
     return (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
             <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-3xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[80vh]">
@@ -46,19 +49,19 @@ const ItemHistoryModal = ({ isOpen, onClose, itemName, role }) => {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-200 dark:divide-gray-700">
-                                    {history.map((entry) => (
+                                    {stockHistory.map((entry) => (
                                         <tr key={entry.id}>
                                             <td className="px-4 py-3 text-slate-900 dark:text-white text-sm">
-                                                {new Date(entry.date).toLocaleDateString()}
-                                                <span className="block text-xs text-slate-500">{new Date(entry.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                {new Date(entry?.transaction_date).toLocaleDateString()}
+                                                <span className="block text-xs text-slate-500">{new Date(entry?.transaction_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                             </td>
-                                            <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">{entry.supplier || '-'}</td>
+                                            <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">{entry.supplier?.name || '-'}</td>
                                             <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">{entry.quantity}</td>
-                                            <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm italic">{entry.note || '-'}</td>
+                                            <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm italic">{entry.notes || '-'}</td>
                                             {role === 'admin' && (
                                                 <>
-                                                    <td className="px-4 py-3 text-slate-900 dark:text-white text-sm font-medium">₹{entry.unitValue}</td>
-                                                    <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">₹{(entry.quantity * entry.unitValue).toFixed(2)}</td>
+                                                    <td className="px-4 py-3 text-slate-900 dark:text-white text-sm font-medium">₹{entry?.unit_cost}</td>
+                                                    <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">₹{(entry.quantity * entry.unit_cost).toFixed(2)}</td>
                                                 </>
                                             )}
                                         </tr>

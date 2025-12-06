@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useInventory } from '../context/InventoryContext';
+
+import { useFetchQuery } from '../hooks/useFetchQuery';
+import { fetchWithAuth } from '../utils/fetchApis';
+import { getAuthStatus } from '../utils/auth';
 import PurchaseModal from '../components/PurchaseModal';
 import ApprovalModal from '../components/ApprovalModal';
 import ItemHistoryModal from '../components/ItemHistoryModal';
@@ -7,40 +10,51 @@ import ItemHistoryModal from '../components/ItemHistoryModal';
 import CreateItemModal from '../components/CreateItemModal';
 
 const Inventory = () => {
-    const { inventoryItems, pendingItems } = useInventory();
     const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [approvalItem, setApprovalItem] = useState(null);
     const [historyItemName, setHistoryItemName] = useState(null);
     const [activeTab, setActiveTab] = useState('raw_materials');
-    const [role, setRole] = useState('accountant'); // Default fallback
+    const { role } = getAuthStatus()?.user || 'accountant';
 
-    useEffect(() => {
-        const userStr = localStorage.getItem('user');
-        if (userStr) {
-            const user = JSON.parse(userStr);
-            setRole(user.role);
-        }
-    }, []);
+    const { data, isFetching, isError, error } = useFetchQuery({
+        url: `inventory/items/?category=${activeTab}`,
+        queryKey: ['items', activeTab],
+        fetchFunction: fetchWithAuth,
+        staleTime: 2 * 60 * 1000,
+    });
+
+    const { data: pendingItems } = useFetchQuery({
+        url: `inventory/transactions/?category=${activeTab}&status=pending`,
+        queryKey: ['transactions', activeTab],
+        fetchFunction: fetchWithAuth,
+        staleTime: 2 * 60 * 1000,
+    });
 
     const handlePurchaseClick = () => {
         setIsPurchaseModalOpen(true);
+    };
+
+    const handleOpenCreateFromPurchase = () => {
+        setIsCreateModalOpen(true);
     };
 
     const handleCreateClick = () => {
         setIsCreateModalOpen(true);
     };
 
-    const handleApproveClick = (item) => {
-        setApprovalItem(item);
+    const handleApproveClick = (entry) => {
+        console.log('Approving entry:', entry); 
+        console.log('Entry', !!entry ? entry.id : 'No entry provided');
+        setApprovalItem(entry);
     };
 
     const handleItemClick = (itemName) => {
         setHistoryItemName(itemName);
     };
 
-    const filteredInventory = inventoryItems.filter(item => item.category === activeTab);
-    const filteredPending = pendingItems.filter(item => item.category === activeTab);
+    const filteredInventory = data?.results || [];
+    const filteredPending = pendingItems?.results || [];
 
     return (
         <div className="flex-1 overflow-y-auto p-8">
@@ -124,15 +138,15 @@ const Inventory = () => {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-orange-200 dark:divide-orange-800">
-                                    {filteredPending.map((item) => (
-                                        <tr key={item.id}>
-                                            <td className="px-4 py-3 text-slate-900 dark:text-white text-sm">{item.name}</td>
-                                            <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">{item.quantity} {item.unit}</td>
-                                            <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">{item.supplier || '-'}</td>
-                                            <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">{new Date(item.createdAt).toLocaleDateString()}</td>
+                                    {filteredPending.map((entry) => (
+                                        <tr key={entry.id}>
+                                            <td className="px-4 py-3 text-slate-900 dark:text-white text-sm">{entry.item.name}</td>
+                                            <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">{entry.quantity} {entry.item.unit}</td>
+                                            <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">{entry.supplier.name || '-'}</td>
+                                            <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">{new Date(entry.transaction_date).toLocaleDateString()}</td>
                                             <td className="px-4 py-3 text-sm">
                                                 <button
-                                                    onClick={() => handleApproveClick(item)}
+                                                    onClick={() => handleApproveClick(entry)}
                                                     className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold bg-eva-blue text-white hover:bg-blue-800 transition-colors"
                                                 >
                                                     Approve & Price
@@ -173,24 +187,24 @@ const Inventory = () => {
                                                 className="font-bold text-eva-blue hover:underline text-left"
                                             >
                                                 {item.name}
-                                            </button>
+                                            </button>   
                                         </td>
-                                        <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">{item.quantity} {item.unit}</td>
+                                        <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">{item?.available_quantity} {item.unit}</td>
                                         {role === 'admin' && (
                                             <>
                                                 {/* Unit Value Removed */}
-                                                <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">₹{item.totalValue.toLocaleString()}</td>
+                                                <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">₹{item?.available_price}</td>
                                             </>
                                         )}
                                         <td className="h-[72px] px-4 py-2 text-sm">
                                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                                                ${item.status === 'In Stock' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
-                                                    item.status === 'Low Stock' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300' :
-                                                        item.status === 'Out of Stock' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' :
+                                                ${item.stock_status === 'In Stock' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
+                                                    item.stock_status === 'Low Stock' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300' :
+                                                        item.stock_status === 'Out of Stock' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' :
                                                             'bg-gray-100 text-gray-800'}`}>
-                                                {item.status}
+                                                {item.stock_status}
                                             </span>
-                                        </td>
+                                        </td> 
                                         <td className="h-[72px] px-4 py-2 text-sm">
                                             <button className="font-medium text-eva-blue hover:underline">Adjustment Entry</button>
                                         </td>
@@ -200,13 +214,13 @@ const Inventory = () => {
                                     The prompt said "when an entry is added it should show in the list on the inventory page".
                                     I'll add them here for Accountant view with "Pending" status and hidden price.
                                 */}
-                                {role === 'accountant' && filteredPending.map((item) => (
-                                    <tr key={item.id} className="bg-slate-50/50 dark:bg-slate-800/50">
+                                {role === 'accountant' && filteredPending.map((entry) => (
+                                    <tr key={entry.id} className="bg-slate-50/50 dark:bg-slate-800/50">
                                         <td className="h-[72px] px-4 py-2 text-slate-900 dark:text-white text-sm">
-                                            {item.name}
+                                            {entry.item.name}
                                             <span className="ml-2 text-xs text-orange-500 font-medium">(Pending)</span>
                                         </td>
-                                        <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">{item.quantity} {item.unit}</td>
+                                        <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">{entry.quantity} {entry.item.unit}</td>
                                         {/* Pricing columns hidden for accountant */}
                                         <td className="h-[72px] px-4 py-2 text-sm">
                                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400">
@@ -228,6 +242,7 @@ const Inventory = () => {
                 isOpen={isPurchaseModalOpen}
                 onClose={() => setIsPurchaseModalOpen(false)}
                 role={role}
+                onOpenCreateModal={handleOpenCreateFromPurchase}
             />
 
             <CreateItemModal
@@ -238,7 +253,7 @@ const Inventory = () => {
             <ApprovalModal
                 isOpen={!!approvalItem}
                 onClose={() => setApprovalItem(null)}
-                item={approvalItem}
+                entry={approvalItem}
             />
 
             <ItemHistoryModal

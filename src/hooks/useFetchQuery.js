@@ -5,6 +5,8 @@ export const useFetchQuery = ({
   queryKey,
   fetchFunction,
   enabled = true,
+  staleTime = 0,
+  cacheTime = 5 * 60 * 1000,
 }) => {
   return useQuery({
     queryKey,
@@ -18,6 +20,9 @@ export const useFetchQuery = ({
       }
     },
     enabled,
+    staleTime,
+    refetchOnMount: false, 
+    refetchOnWindowFocus: false,
     onSuccess: (data) => {
       return data;
     },
