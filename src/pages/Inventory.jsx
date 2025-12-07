@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 import { useFetchQuery } from '../hooks/useFetchQuery';
 import { fetchWithAuth } from '../utils/fetchApis';
@@ -16,6 +17,10 @@ const Inventory = () => {
     const [historyItemName, setHistoryItemName] = useState(null);
     const [activeTab, setActiveTab] = useState('raw_materials');
     const { role } = getAuthStatus()?.user || 'accountant';
+
+    const [showFilters, setShowFilters] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState('');
 
     const { data, isFetching, isError, error } = useFetchQuery({
         url: `inventory/items/?category=${activeTab}`,
@@ -44,7 +49,7 @@ const Inventory = () => {
     };
 
     const handleApproveClick = (entry) => {
-        console.log('Approving entry:', entry); 
+        console.log('Approving entry:', entry);
         console.log('Entry', !!entry ? entry.id : 'No entry provided');
         setApprovalItem(entry);
     };
@@ -53,7 +58,19 @@ const Inventory = () => {
         setHistoryItemName(itemName);
     };
 
-    const filteredInventory = data?.results || [];
+    const rawInventory = data?.results || [];
+    const filteredInventory = rawInventory.filter(item => {
+        // Search Filter
+        if (searchQuery && !item.name.toLowerCase().includes(searchQuery.toLowerCase())) {
+            return false;
+        }
+        // Status Filter
+        if (statusFilter && item.stock_status !== statusFilter) {
+            return false;
+        }
+        return true;
+    });
+
     const filteredPending = pendingItems?.results || [];
 
     return (
@@ -102,11 +119,14 @@ const Inventory = () => {
                         <div className="relative">
                             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">search</span>
                             <input
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
                                 className="pl-10 pr-4 py-2 h-10 border border-slate-200 rounded-lg bg-white dark:bg-background-dark dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-eva-blue focus:border-transparent outline-none transition w-64"
                                 placeholder="Search item..." type="text" />
                         </div>
                         <button
-                            className="flex items-center gap-2 p-2 h-10 text-slate-900 dark:text-gray-300 border border-slate-200 dark:border-gray-700 rounded-lg bg-white dark:bg-background-dark hover:bg-slate-50 dark:hover:bg-gray-800">
+                            onClick={() => setShowFilters(!showFilters)}
+                            className={`flex items-center gap-2 p-2 h-10 border rounded-lg transition-colors ${showFilters ? 'bg-eva-blue text-white border-eva-blue' : 'bg-white dark:bg-background-dark border-slate-200 dark:border-gray-700 text-slate-900 dark:text-gray-300 hover:bg-slate-50 dark:hover:bg-gray-800'}`}>
                             <span className="material-symbols-outlined">filter_list</span>
                             <span className="text-sm">Filter</span>
                         </button>
@@ -118,6 +138,37 @@ const Inventory = () => {
                         <span className="truncate">Purchase Stock</span>
                     </button>
                 </div>
+
+                {/* Filter Panel */}
+                {showFilters && (
+                    <div className="mb-6 p-4 rounded-lg border border-slate-200 bg-slate-50 dark:bg-slate-900 dark:border-slate-800 flex items-end gap-4">
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Status</label>
+                            <select
+                                value={statusFilter}
+                                onChange={(e) => setStatusFilter(e.target.value)}
+                                className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-eva-blue outline-none text-slate-900 dark:text-white min-w-[150px]"
+                            >
+                                <option value="">All Statuses</option>
+                                <option value="In Stock">In Stock</option>
+                                <option value="Low Stock">Low Stock</option>
+                                <option value="Out of Stock">Out of Stock</option>
+                            </select>
+                        </div>
+                        {(statusFilter || searchQuery) && (
+                            <button
+                                onClick={() => {
+                                    setStatusFilter('');
+                                    setSearchQuery('');
+                                }}
+                                className="px-4 py-2 text-sm text-red-600 hover:text-red-700 font-medium hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 rounded-lg transition-colors flex items-center gap-2 mb-[1px]"
+                            >
+                                <span className="material-symbols-outlined text-lg">delete</span>
+                                Clear Filters
+                            </button>
+                        )}
+                    </div>
+                )}
 
                 {/* Pending Approvals (Admin Only) */}
                 {role === 'admin' && filteredPending.length > 0 && (
@@ -162,79 +213,85 @@ const Inventory = () => {
 
                 {/* Main Inventory Table */}
                 <div className="mt-2">
-                    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:bg-background-dark dark:border-gray-700">
-                        <table className="w-full text-left">
-                            <thead className="bg-slate-50 dark:bg-gray-800">
-                                <tr className="border-b border-slate-200 dark:border-gray-700">
-                                    <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Item Name</th>
-                                    <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Current Quantity</th>
-                                    {role === 'admin' && (
-                                        <>
-                                            {/* Unit Value Removed */}
-                                            <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Total Value</th>
-                                        </>
-                                    )}
-                                    <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Status</th>
-                                    <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-200 dark:divide-gray-700">
-                                {filteredInventory.map((item) => (
-                                    <tr key={item.id}>
-                                        <td className="h-[72px] px-4 py-2 text-slate-900 dark:text-white text-sm">
-                                            <button
-                                                onClick={() => handleItemClick(item.name)}
-                                                className="font-bold text-eva-blue hover:underline text-left"
-                                            >
-                                                {item.name}
-                                            </button>   
-                                        </td>
-                                        <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">{item?.available_quantity} {item.unit}</td>
+                    {isFetching && !data ? (
+                        <div className="flex justify-center items-center h-64">
+                            <LoadingSpinner size="lg" />
+                        </div>
+                    ) : (
+                        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:bg-background-dark dark:border-gray-700">
+                            <table className="w-full text-left">
+                                <thead className="bg-slate-50 dark:bg-gray-800">
+                                    <tr className="border-b border-slate-200 dark:border-gray-700">
+                                        <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Item Name</th>
+                                        <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Current Quantity</th>
                                         {role === 'admin' && (
                                             <>
                                                 {/* Unit Value Removed */}
-                                                <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">₹{item?.available_price}</td>
+                                                <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Total Value</th>
                                             </>
                                         )}
-                                        <td className="h-[72px] px-4 py-2 text-sm">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                                                ${item.stock_status === 'In Stock' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
-                                                    item.stock_status === 'Low Stock' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300' :
-                                                        item.stock_status === 'Out of Stock' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' :
-                                                            'bg-gray-100 text-gray-800'}`}>
-                                                {item.stock_status}
-                                            </span>
-                                        </td> 
-                                        <td className="h-[72px] px-4 py-2 text-sm">
-                                            <button className="font-medium text-eva-blue hover:underline">Adjustment Entry</button>
-                                        </td>
+                                        <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Status</th>
+                                        <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Actions</th>
                                     </tr>
-                                ))}
-                                {/* Show pending items for accountant in the main list as requested, but maybe with a different status?
-                                    The prompt said "when an entry is added it should show in the list on the inventory page".
-                                    I'll add them here for Accountant view with "Pending" status and hidden price.
-                                */}
-                                {role === 'accountant' && filteredPending.map((entry) => (
-                                    <tr key={entry.id} className="bg-slate-50/50 dark:bg-slate-800/50">
-                                        <td className="h-[72px] px-4 py-2 text-slate-900 dark:text-white text-sm">
-                                            {entry.item.name}
-                                            <span className="ml-2 text-xs text-orange-500 font-medium">(Pending)</span>
-                                        </td>
-                                        <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">{entry.quantity} {entry.item.unit}</td>
-                                        {/* Pricing columns hidden for accountant */}
-                                        <td className="h-[72px] px-4 py-2 text-sm">
-                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400">
-                                                Pending Approval
-                                            </span>
-                                        </td>
-                                        <td className="h-[72px] px-4 py-2 text-sm">
-                                            <span className="text-slate-400 italic text-xs">Awaiting Admin</span>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                                </thead>
+                                <tbody className="divide-y divide-slate-200 dark:divide-gray-700">
+                                    {filteredInventory.map((item) => (
+                                        <tr key={item.id}>
+                                            <td className="h-[72px] px-4 py-2 text-slate-900 dark:text-white text-sm">
+                                                <button
+                                                    onClick={() => handleItemClick(item.name)}
+                                                    className="font-bold text-eva-blue hover:underline text-left"
+                                                >
+                                                    {item.name}
+                                                </button>
+                                            </td>
+                                            <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">{item?.available_quantity} {item.unit}</td>
+                                            {role === 'admin' && (
+                                                <>
+                                                    {/* Unit Value Removed */}
+                                                    <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">₹{item?.available_price}</td>
+                                                </>
+                                            )}
+                                            <td className="h-[72px] px-4 py-2 text-sm">
+                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                                    ${item.stock_status === 'In Stock' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
+                                                        item.stock_status === 'Low Stock' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300' :
+                                                            item.stock_status === 'Out of Stock' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' :
+                                                                'bg-gray-100 text-gray-800'}`}>
+                                                    {item.stock_status}
+                                                </span>
+                                            </td>
+                                            <td className="h-[72px] px-4 py-2 text-sm">
+                                                <button className="font-medium text-eva-blue hover:underline">Adjustment Entry</button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {/* Show pending items for accountant in the main list as requested, but maybe with a different status?
+                                        The prompt said "when an entry is added it should show in the list on the inventory page".
+                                        I'll add them here for Accountant view with "Pending" status and hidden price.
+                                    */}
+                                    {role === 'accountant' && filteredPending.map((entry) => (
+                                        <tr key={entry.id} className="bg-slate-50/50 dark:bg-slate-800/50">
+                                            <td className="h-[72px] px-4 py-2 text-slate-900 dark:text-white text-sm">
+                                                {entry.item.name}
+                                                <span className="ml-2 text-xs text-orange-500 font-medium">(Pending)</span>
+                                            </td>
+                                            <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">{entry.quantity} {entry.item.unit}</td>
+                                            {/* Pricing columns hidden for accountant */}
+                                            <td className="h-[72px] px-4 py-2 text-sm">
+                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400">
+                                                    Pending Approval
+                                                </span>
+                                            </td>
+                                            <td className="h-[72px] px-4 py-2 text-sm">
+                                                <span className="text-slate-400 italic text-xs">Awaiting Admin</span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
                 </div>
             </div>
 
