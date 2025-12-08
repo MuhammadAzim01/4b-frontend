@@ -4,32 +4,20 @@ import { useFetchQuery } from '../hooks/useFetchQuery';
 import { fetchWithAuth } from '../utils/fetchApis';
 
 const EndProductionModal = ({ isOpen, onClose, onEnd, runData }) => {
-    const [outputItem, setOutputItem] = useState('');
+    const [productId, setProductId] = useState('');
     const [outputQuantity, setOutputQuantity] = useState('');
+    const [notes, setNotes] = useState('');
+    const [wasteItems, setWasteItems] = useState([]);
 
-    // Waste tracking - potentially multiple waste items
-    const [wasteItems, setWasteItems] = useState([{ id: Date.now(), materialId: '', quantity: '' }]);
-
-    // Fetch finished goods for output selection
-    const { data: finishedGoods } = useFetchQuery({
-        url: 'inventory/items/?category=plant_assets', // Assuming finished goods are here or we need a new category. prompt implies 'Finished Good'
-        // Actually, per prompt "End good produced". I will assume standard items for now or maybe 'returnable_assets' or just all items?
-        // Let's stick to 'plant_assets' or just query all items if category isn't clear.
-        // Re-reading: "end good produced". In a real app this might be a specific category 'Finished Goods'. 
-        // For now I'll use 'plant_assets' as a placeholder or maybe just fetch all items. 
-        // Let's use 'raw_materials' for waste selection (usually waste is raw material scrap).
-        queryKey: ['finished_goods'],
+    // Fetch products (finished goods)
+    const { data } = useFetchQuery({
+        url: 'production/products/',
+        queryKey: ['products'],
         fetchFunction: fetchWithAuth,
         enabled: isOpen,
     });
 
-    // Reuse raw materials query for waste selection
-    const { data: rawMaterials } = useFetchQuery({
-        url: 'inventory/items/?category=raw_materials',
-        queryKey: ['raw_materials'],
-        fetchFunction: fetchWithAuth,
-        enabled: isOpen,
-    });
+    const products = data?.results || [];
 
     const handleAddWaste = () => {
         setWasteItems([...wasteItems, { id: Date.now(), materialId: '', quantity: '' }]);
@@ -39,51 +27,74 @@ const EndProductionModal = ({ isOpen, onClose, onEnd, runData }) => {
         setWasteItems(wasteItems.filter(m => m.id !== id));
     };
 
+    // Get max waste quantity for a material (cannot exceed quantity_used)
+    const getMaxWasteQuantity = (materialId) => {
+        const material = runData?.raw_materials?.find(m => m.raw_material.toString() === materialId);
+        return material ? parseFloat(material.quantity_used) : 0;
+    };
+
     const handleWasteChange = (id, field, value) => {
+        if (field === 'quantity') {
+            const wasteItem = wasteItems.find(w => w.id === id);
+            if (wasteItem && wasteItem.materialId) {
+                const maxWaste = getMaxWasteQuantity(wasteItem.materialId);
+            
+                if (value !== '' && (parseFloat(value) < 0 || parseFloat(value) > maxWaste)) {
+                    return;
+                }
+            } else if (value !== '' && parseFloat(value) < 0) {
+                return;
+            }
+        }
         setWasteItems(wasteItems.map(m => m.id === id ? { ...m, [field]: value } : m));
+    };
+
+    const handleMaxWaste = (id, materialId) => {
+        const material = runData?.raw_materials?.find(m => m.raw_material.toString() === materialId);
+        if (material) {
+            handleWasteChange(id, 'quantity', material.quantity_used);
+        }
+    };
+
+    // Get available materials for waste (not already selected)
+    const getAvailableWasteMaterials = (currentMaterialId) => {
+        const selectedIds = wasteItems.map(w => w.materialId).filter(id => id !== currentMaterialId);
+        return runData?.raw_materials?.filter(item => 
+            !selectedIds.includes(item.raw_material.toString())
+        ) || [];
+    };
+
+    const handleOutputQuantityChange = (value) => {
+        // Prevent negative values for output quantity
+        if (value !== '' && parseFloat(value) < 0) {
+            return;
+        }
+        setOutputQuantity(value);
     };
 
     const handleSubmit = (e) => {
         e.preventDefault();
 
-        // Validation: Output cannot exceed input.
-        // Assumes 1 unit of product requires at least 1 unit of input material (simplest 1:1 case).
-        // Find the limiting factor (material with lowest quantity) or just sum them? 
-        // User request: "if i start the run for 50 material i cannot produced 51 or more with it".
-        // This implies for a single material run. For multi-material, usually the main material triggers the limit.
-        // Let's take the sum of inputs vs sum of outputs? Or check against each input?
-        // Safest assumption given "50 material -> 51 produced" example: Total Output <= Total Input 
-        // OR more strictly: Output <= Input for EACH unit. 
-        // Let's assume the user means the Total Count of the main material. 
-        // We actually track 'quantity' in 'runData.materials'.
-
-        // Let's sum up all input quantities from the run data
-        const totalInput = runData?.materials?.reduce((acc, m) => acc + parseInt(m.quantity || 0), 0) || 0;
-        const totalOutput = parseInt(outputQuantity || 0);
-
-        if (totalOutput > totalInput) {
-            alert(`Error: Output quantity (${totalOutput}) cannot exceed total input quantity (${totalInput}).`);
-            return;
-        }
-
         const wasteSummary = wasteItems
-            .filter(w => w.materialId && w.quantity) // Filter out empty entries
+            .filter(w => w.materialId && w.quantity)
             .map(w => {
-                const item = rawMaterials?.results?.find(r => r.id.toString() === w.materialId);
-                return { ...w, name: item ? item.name : 'Unknown' };
+                const material = runData?.raw_materials?.find(m => m.raw_material.toString() === w.materialId);
+                return { 
+                    materialId: w.materialId, 
+                    quantity: w.quantity,
+                    name: material ? material.raw_material_name : 'Unknown'
+                };
             });
 
-        const outputItemName = finishedGoods?.results?.find(r => r.id.toString() === outputItem)?.name || 'Unknown Item';
-
         onEnd({
-            outputItem,
-            outputItemName,
+            productId,
             outputQuantity,
-            waste: wasteSummary
+            waste: wasteSummary,
+            notes
         });
     };
 
-    if (!isOpen) return null;
+    if (!isOpen || !runData) return null;
 
     return (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -91,7 +102,7 @@ const EndProductionModal = ({ isOpen, onClose, onEnd, runData }) => {
                 <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
                     <div>
                         <h2 className="text-xl font-bold text-slate-900 dark:text-white">Complete Production Run</h2>
-                        <p className="text-sm text-slate-500">Run ID: <span className="font-mono text-slate-700 dark:text-slate-300">{runData?.id}</span></p>
+                        <p className="text-sm text-slate-500">Batch: <span className="font-mono text-slate-700 dark:text-slate-300">{runData?.batch_number}</span></p>
                     </div>
                     <button onClick={onClose} className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white">
                         <span className="material-symbols-outlined">close</span>
@@ -110,14 +121,14 @@ const EndProductionModal = ({ isOpen, onClose, onEnd, runData }) => {
                                 <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Finished Good</label>
                                 <select
                                     required
-                                    value={outputItem}
-                                    onChange={(e) => setOutputItem(e.target.value)}
+                                    value={productId}
+                                    onChange={(e) => setProductId(e.target.value)}
                                     className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-green-500 outline-none text-slate-900 dark:text-white"
                                 >
-                                    <option value="">Select Item</option>
-                                    <option value="1">Water Bottle - 500ml</option>
-                                    <option value="2">Water Bottle - 1L</option>
-                                    {/* Hardcoding options for now as I don't have a dedicated finished goods endpoint confirmed */}
+                                    <option value="">Select Product</option>
+                                    {products?.map(product => (
+                                        <option key={product.id} value={product.id}>{product.name}</option>
+                                    ))}
                                 </select>
                             </div>
                             <div>
@@ -126,8 +137,10 @@ const EndProductionModal = ({ isOpen, onClose, onEnd, runData }) => {
                                     required
                                     type="number"
                                     placeholder="Qty"
+                                    min="0.01"
+                                    step="0.01"
                                     value={outputQuantity}
-                                    onChange={(e) => setOutputQuantity(e.target.value)}
+                                    onChange={(e) => handleOutputQuantityChange(e.target.value)}
                                     className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-green-500 outline-none text-slate-900 dark:text-white"
                                 />
                             </div>
@@ -151,39 +164,71 @@ const EndProductionModal = ({ isOpen, onClose, onEnd, runData }) => {
                         </div>
 
                         <div className="space-y-3">
-                            {wasteItems.map((field) => (
-                                <div key={field.id} className="flex gap-4 items-start">
-                                    <div className="flex-1">
-                                        <select
-                                            value={field.materialId}
-                                            onChange={(e) => handleWasteChange(field.id, 'materialId', e.target.value)}
-                                            className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-red-500 outline-none text-slate-900 dark:text-white"
+                            {wasteItems.map((field) => {
+                                const availableMaterials = getAvailableWasteMaterials(field.materialId);
+                                const maxWaste = getMaxWasteQuantity(field.materialId);
+                                
+                                return (
+                                    <div key={field.id} className="flex gap-2 items-start">
+                                        <div className="flex-1">
+                                            <select
+                                                value={field.materialId}
+                                                onChange={(e) => handleWasteChange(field.id, 'materialId', e.target.value)}
+                                                className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-red-500 outline-none text-slate-900 dark:text-white"
+                                            >
+                                                <option value="">Select Material</option>
+                                                {availableMaterials.map(item => (
+                                                    <option key={item.raw_material} value={item.raw_material}>
+                                                        {item.raw_material_name} (Used: {item.quantity_used})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="w-32">
+                                            <input
+                                                type="number"
+                                                placeholder="Qty"
+                                                min="0"
+                                                step="1"
+                                                max={maxWaste}
+                                                value={field.quantity}
+                                                onChange={(e) => handleWasteChange(field.id, 'quantity', e.target.value)}
+                                                className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-red-500 outline-none text-slate-900 dark:text-white"
+                                            />
+                                        </div>
+                                        {field.materialId && (
+                                            <button
+                                                type="button"
+                                                onClick={() => handleMaxWaste(field.id, field.materialId)}
+                                                className="px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors border border-red-600"
+                                                title="Use maximum quantity used"
+                                            >
+                                                MAX
+                                            </button>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => handleRemoveWaste(field.id)}
+                                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                                         >
-                                            <option value="">Select Material</option>
-                                            {rawMaterials?.results?.map(item => (
-                                                <option key={item.id} value={item.id}>{item.name}</option>
-                                            ))}
-                                        </select>
+                                            <span className="material-symbols-outlined text-lg">close</span>
+                                        </button>
                                     </div>
-                                    <div className="w-32">
-                                        <input
-                                            type="number"
-                                            placeholder="Qty"
-                                            value={field.quantity}
-                                            onChange={(e) => handleWasteChange(field.id, 'quantity', e.target.value)}
-                                            className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-red-500 outline-none text-slate-900 dark:text-white"
-                                        />
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => handleRemoveWaste(field.id)}
-                                        className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                                    >
-                                        <span className="material-symbols-outlined text-lg">close</span>
-                                    </button>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
+                    </div>
+
+                    {/* Notes Section */}
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Notes (Optional)</label>
+                        <textarea
+                            value={notes}
+                            onChange={(e) => setNotes(e.target.value)}
+                            placeholder="Add any notes about this production run..."
+                            rows="3"
+                            className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-white resize-none"
+                        />
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">

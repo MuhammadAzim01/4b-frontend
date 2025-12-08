@@ -1,7 +1,11 @@
 
 import React from 'react';
+import { getAuthStatus } from '../utils/auth';
 
 const ProductionDetailsModal = ({ isOpen, onClose, run }) => {
+    const wastage = run?.raw_materials?.filter(m => m.quantity_wasted > 0);
+    const { role } = getAuthStatus().user;
+
     if (!isOpen || !run) return null;
 
     return (
@@ -13,11 +17,11 @@ const ProductionDetailsModal = ({ isOpen, onClose, run }) => {
                         <div className="flex items-center gap-3 mb-1">
                             <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Production Details</h2>
                             <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wide
-                                ${run.status === 'Completed' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-blue-100 text-blue-800'}`}>
+                                ${run.status === 'completed' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-blue-100 text-blue-800'}`}>
                                 {run.status}
                             </span>
                         </div>
-                        <p className="text-sm text-slate-500 font-mono">ID: {run.id}</p>
+                        <p className="text-sm text-slate-500 font-mono">Batch: {run.batch_number}</p>
                     </div>
                     <button onClick={onClose} className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white transition-colors">
                         <span className="material-symbols-outlined text-2xl">close</span>
@@ -31,28 +35,26 @@ const ProductionDetailsModal = ({ isOpen, onClose, run }) => {
                             <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Timeline</h3>
                             <div className="space-y-2">
                                 <div className="flex justify-between">
-                                    <span className="text-sm text-slate-600 dark:text-slate-400">Date/Time</span>
-                                    <span className="text-sm font-semibold text-slate-900 dark:text-white">{run.date}</span>
+                                    <span className="text-sm text-slate-600 dark:text-slate-400">Started</span>
+                                    <span className="text-sm font-semibold text-slate-900 dark:text-white">{new Date(run.start_date).toLocaleString()}</span>
                                 </div>
-                                {/* Could add Start/End specific times if available in data */}
+                                <div className="flex justify-between">
+                                    <span className="text-sm text-slate-600 dark:text-slate-400">Completed</span>
+                                    <span className="text-sm font-semibold text-slate-900 dark:text-white">{run.end_date ? new Date(run.end_date).toLocaleString() : 'N/A'}</span>
+                                </div>
                             </div>
                         </div>
-
+                        {role == 'admin' && (
                         <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg border border-slate-100 dark:border-slate-700">
-                            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Performance</h3>
+                            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Cost Summary</h3>
                             <div className="flex items-center justify-between">
-                                <span className="text-sm text-slate-600 dark:text-slate-400">Efficiency Score</span>
-                                <div className="flex items-center gap-2">
-                                    <span className={`text-2xl font-black 
-                                        ${run.efficiency >= 95 ? 'text-green-600 dark:text-green-400' :
-                                            run.efficiency >= 85 ? 'text-blue-600 dark:text-blue-400' :
-                                                run.efficiency >= 70 ? 'text-yellow-600 dark:text-yellow-400' :
-                                                    'text-red-600 dark:text-red-400'}`}>
-                                        {run.efficiency}%
-                                    </span>
-                                </div>
+                                <span className="text-sm text-slate-600 dark:text-slate-400">Total Cost</span>
+                                <span className="text-2xl font-black text-blue-600 dark:text-blue-400">
+                                    ${parseFloat(run.total_cost || 0).toFixed(2)}
+                                </span>
                             </div>
                         </div>
+                        )}
                     </div>
 
                     {/* Input Section */}
@@ -70,18 +72,12 @@ const ProductionDetailsModal = ({ isOpen, onClose, run }) => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {Array.isArray(run.materials) ? run.materials.map((m, idx) => (
+                                    {run.raw_materials?.map((m, idx) => (
                                         <tr key={idx} className="border-b last:border-0 border-slate-100 dark:border-slate-800">
-                                            <td className="px-4 py-3 text-slate-900 dark:text-white">{m.name}</td>
-                                            <td className="px-4 py-3 text-right font-mono font-medium text-slate-700 dark:text-slate-300">{m.quantity}</td>
+                                            <td className="px-4 py-3 text-slate-900 dark:text-white">{m.raw_material_name}</td>
+                                            <td className="px-4 py-3 text-right font-mono font-medium text-slate-700 dark:text-slate-300">{m.quantity_used}</td>
                                         </tr>
-                                    )) : (
-                                        // Fallback for old string data structure in dummy data
-                                        <tr>
-                                            <td className="px-4 py-3 text-slate-900 dark:text-white">{run.materials}</td>
-                                            <td className="px-4 py-3 text-right font-mono font-medium text-slate-700 dark:text-slate-300">{run.matQty}</td>
-                                        </tr>
-                                    )}
+                                    ))}
                                 </tbody>
                             </table>
                         </div>
@@ -98,12 +94,12 @@ const ProductionDetailsModal = ({ isOpen, onClose, run }) => {
                                 <div className="space-y-3">
                                     <div>
                                         <p className="text-xs text-green-800 dark:text-green-400 font-semibold uppercase">Product</p>
-                                        <p className="text-lg font-bold text-slate-900 dark:text-white">{run.output}</p>
+                                        <p className="text-lg font-bold text-slate-900 dark:text-white">{run.product_name || 'N/A'}</p>
                                     </div>
                                     <div className="h-px bg-green-200 dark:bg-green-800/50"></div>
                                     <div className="flex justify-between items-baseline">
                                         <p className="text-xs text-green-800 dark:text-green-400 font-semibold uppercase">Total Produced</p>
-                                        <p className="text-2xl font-black text-green-600 dark:text-green-400">{run.outQty}</p>
+                                        <p className="text-2xl font-black text-green-600 dark:text-green-400">{run.product_quantity || 0}</p>
                                     </div>
                                 </div>
                             </div>
@@ -114,7 +110,7 @@ const ProductionDetailsModal = ({ isOpen, onClose, run }) => {
                                 <span className="material-symbols-outlined text-red-500">delete_outline</span>
                                 Waste / Scrap
                             </h3>
-                            {run.waste && run.waste.length > 0 ? (
+                            {wastage && wastage.length > 0 ? (
                                 <div className="bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-100 dark:border-red-800/30 overflow-hidden">
                                     <table className="w-full text-sm text-left">
                                         <thead className="bg-red-100/50 dark:bg-red-900/20 text-xs text-red-800 dark:text-red-400 uppercase">
@@ -124,10 +120,10 @@ const ProductionDetailsModal = ({ isOpen, onClose, run }) => {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {run.waste.map((w, idx) => (
+                                            {wastage.map((w, idx) => (
                                                 <tr key={idx} className="border-b last:border-0 border-red-100 dark:border-red-800/30">
-                                                    <td className="px-4 py-2 text-slate-900 dark:text-white">{w.name}</td>
-                                                    <td className="px-4 py-2 text-right font-mono font-bold text-red-600 dark:text-red-400">{w.quantity}</td>
+                                                    <td className="px-4 py-2 text-slate-900 dark:text-white">{w.raw_material_name}</td>
+                                                    <td className="px-4 py-2 text-right font-mono font-bold text-red-600 dark:text-red-400">{w.quantity_wasted}</td>
                                                 </tr>
                                             ))}
                                         </tbody>

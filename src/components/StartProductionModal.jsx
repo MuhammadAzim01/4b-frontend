@@ -7,7 +7,6 @@ import LoadingSpinner from './ui/LoadingSpinner';
 
 const StartProductionModal = ({ isOpen, onClose, onStart }) => {
     const [materials, setMaterials] = useState([{ id: Date.now(), materialId: '', quantity: '' }]);
-    const [shouldPrint, setShouldPrint] = useState(true);
 
     const { data: rawMaterials, isFetching } = useFetchQuery({
         url: 'inventory/items/?category=raw_materials',
@@ -26,22 +25,48 @@ const StartProductionModal = ({ isOpen, onClose, onStart }) => {
         }
     };
 
+    // Get max quantity for a material
+    const getMaxQuantity = (materialId) => {
+        const material = rawMaterials?.results?.find(item => item.id.toString() === materialId);
+        return material ? parseFloat(material.available_quantity) : 0;
+    };
+
     const handleMaterialChange = (id, field, value) => {
+        if (field === 'quantity') {
+            // Get the material to check max quantity
+            const material = materials.find(m => m.id === id);
+            if (material && material.materialId) {
+                const maxQty = getMaxQuantity(material.materialId);
+                // Prevent negative and values exceeding max
+                if (value !== '' && (parseFloat(value) < 0 || parseFloat(value) > maxQty)) {
+                    return;
+                }
+            } else if (value !== '' && parseFloat(value) < 0) {
+                // If no material selected yet, just prevent negative
+                return;
+            }
+        }
         setMaterials(materials.map(m => m.id === id ? { ...m, [field]: value } : m));
+    };
+
+    const handleMaxClick = (id, materialId) => {
+        const material = rawMaterials?.results?.find(item => item.id.toString() === materialId);
+        if (material) {
+            handleMaterialChange(id, 'quantity', material.available_quantity);
+        }
+    };
+
+    // Get available materials (not already selected and has quantity > 0)
+    const getAvailableMaterials = (currentMaterialId) => {
+        const selectedIds = materials.map(m => m.materialId).filter(id => id !== currentMaterialId);
+        return rawMaterials?.results?.filter(item => 
+            !selectedIds.includes(item.id.toString()) && parseFloat(item.available_quantity) > 0
+        ) || [];
     };
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        // Enrich materials with name for display/printing
-        const enrichedMaterials = materials.map(m => {
-            const item = rawMaterials?.results?.find(r => r.id.toString() === m.materialId);
-            return {
-                ...m,
-                name: item ? item.name : 'Unknown Material'
-            };
-        });
-
-        onStart(enrichedMaterials, shouldPrint);
+        onStart(materials);
     };
 
     if (!isOpen) return null;
@@ -69,77 +94,83 @@ const StartProductionModal = ({ isOpen, onClose, onStart }) => {
                             </button>
                         </div>
 
-                        {materials.map((field, index) => (
-                            <div key={field.id} className="flex gap-4 items-start">
-                                <div className="flex-1">
-                                    <select
-                                        required
-                                        value={field.materialId}
-                                        onChange={(e) => handleMaterialChange(field.id, 'materialId', e.target.value)}
-                                        className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-eva-blue outline-none text-slate-900 dark:text-white"
-                                    >
-                                        <option value="">Select Material</option>
-                                        {isFetching ? (
-                                            <option disabled>Loading...</option>
-                                        ) : (
-                                            rawMaterials?.results?.map(item => (
-                                                <option key={item.id} value={item.id}>{item.name} (Avl: {item.available_quantity})</option>
-                                            ))
-                                        )}
-                                    </select>
+                        {materials.map((field, index) => {
+                            const availableMaterials = getAvailableMaterials(field.materialId);
+                            const maxQty = getMaxQuantity(field.materialId);
+                            
+                            return (
+                                <div key={field.id} className="flex gap-2 items-start">
+                                    <div className="flex-1">
+                                        <select
+                                            required
+                                            value={field.materialId}
+                                            onChange={(e) => handleMaterialChange(field.id, 'materialId', e.target.value)}
+                                            className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-eva-blue outline-none text-slate-900 dark:text-white"
+                                        >
+                                            <option value="">Select Material</option>
+                                            {isFetching ? (
+                                                <option disabled>Loading...</option>
+                                            ) : (
+                                                availableMaterials.map(item => (
+                                                    <option key={item.id} value={item.id}>
+                                                        {item.name} (Avl: {item.available_quantity})
+                                                    </option>
+                                                ))
+                                            )}
+                                        </select>
+                                    </div>
+                                    <div className="w-32">
+                                        <input
+                                            required
+                                            type="number"
+                                            placeholder="Qty"
+                                            min="1"
+                                            step="1"
+                                            max={maxQty}
+                                            value={field.quantity}
+                                            onChange={(e) => handleMaterialChange(field.id, 'quantity', e.target.value)}
+                                            className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-eva-blue outline-none text-slate-900 dark:text-white"
+                                        />
+                                    </div>
+                                    {field.materialId && (
+                                        <button
+                                            type="button"
+                                            onClick={() => handleMaxClick(field.id, field.materialId)}
+                                            className="px-3 py-2 text-xs font-bold text-eva-blue hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors border border-eva-blue"
+                                            title="Use maximum available"
+                                        >
+                                            MAX
+                                        </button>
+                                    )}
+                                    {materials.length > 1 && (
+                                        <button
+                                            type="button"
+                                            onClick={() => handleRemoveMaterial(field.id)}
+                                            className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                        >
+                                            <span className="material-symbols-outlined text-lg">delete</span>
+                                        </button>
+                                    )}
                                 </div>
-                                <div className="w-32">
-                                    <input
-                                        required
-                                        type="number"
-                                        placeholder="Qty"
-                                        value={field.quantity}
-                                        onChange={(e) => handleMaterialChange(field.id, 'quantity', e.target.value)}
-                                        className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-eva-blue outline-none text-slate-900 dark:text-white"
-                                    />
-                                </div>
-                                {materials.length > 1 && (
-                                    <button
-                                        type="button"
-                                        onClick={() => handleRemoveMaterial(field.id)}
-                                        className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                                    >
-                                        <span className="material-symbols-outlined text-lg">delete</span>
-                                    </button>
-                                )}
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
 
-
-
-                    <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
-                        <label className="flex items-center gap-2 cursor-pointer select-none">
-                            <input
-                                type="checkbox"
-                                checked={shouldPrint}
-                                onChange={(e) => setShouldPrint(e.target.checked)}
-                                className="w-4 h-4 rounded border-gray-300 text-eva-blue focus:ring-eva-blue"
-                            />
-                            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Print Job Sheet / Invoice</span>
-                        </label>
-
-                        <div className="flex gap-3">
-                            <button
-                                type="button"
-                                onClick={onClose}
-                                className="px-4 py-2 text-sm font-semibold text-slate-700 bg-gray-100 rounded-lg hover:bg-gray-200 dark:bg-gray-800 dark:text-slate-300 dark:hover:bg-gray-700 transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                className="px-4 py-2 text-sm font-bold text-white bg-eva-blue rounded-lg hover:bg-blue-800 transition-colors flex items-center gap-2"
-                            >
-                                {shouldPrint ? <span className="material-symbols-outlined text-lg">print</span> : <span className="material-symbols-outlined text-lg">play_arrow</span>}
-                                {shouldPrint ? "Start & Print" : "Start Run"}
-                            </button>
-                        </div>
+                    <div className="flex justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="px-4 py-2 text-sm font-semibold text-slate-700 bg-gray-100 rounded-lg hover:bg-gray-200 dark:bg-gray-800 dark:text-slate-300 dark:hover:bg-gray-700 transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            className="px-4 py-2 text-sm font-bold text-white bg-eva-blue rounded-lg hover:bg-blue-800 transition-colors flex items-center gap-2"
+                        >
+                            <span className="material-symbols-outlined text-lg">play_arrow</span>
+                            Start Production
+                        </button>
                     </div>
                 </form>
             </div >
