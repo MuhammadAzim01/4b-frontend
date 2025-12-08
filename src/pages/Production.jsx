@@ -16,11 +16,12 @@ const Production = () => {
     const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
     const [currentRun, setCurrentRun] = useState(null);
     const [selectedHistoryRun, setSelectedHistoryRun] = useState(null);
+    const [historyPage, setHistoryPage] = useState(1);
 
-    // Fetch production batches
+    // Fetch production batches with pagination
     const { data, isFetching, isError, error, refetch } = useFetchQuery({
-        url: 'production/batches/',
-        queryKey: ['production-batches'],
+        url: `production/batches/?page=${historyPage}&page_size=5`,
+        queryKey: ['production-batches', historyPage],
         fetchFunction: fetchWithAuth,
         staleTime: 2 * 60 * 1000,
     });
@@ -99,7 +100,7 @@ const Production = () => {
                 <h1 className="text-slate-900 dark:text-white text-3xl font-black tracking-tight">Production Module</h1>
                 <button
                     onClick={() => setIsStartModalOpen(true)}
-                    className="flex items-center justify-center gap-2 h-10 px-4 text-sm font-bold text-white rounded-lg bg-primary hover:bg-primary/90 transition-colors bg-eva-blue" // Added bg-eva-blue explicitly if bg-primary isn't defined or we want to be safe
+                    className="flex items-center justify-center gap-2 h-10 px-4 text-sm font-bold text-white rounded-lg bg-eva-blue hover:bg-blue-800 transition-colors"
                 >
                     <span className="material-symbols-outlined text-base">add</span>
                     <span className="truncate">Start New Production Run</span>
@@ -248,6 +249,36 @@ const Production = () => {
                                 </tbody>
                             </table>
                         </div>
+
+                        {/* Pagination Controls */}
+                        {history.length > 0 && data && (
+                            <div className="mt-4 flex items-center justify-between px-4">
+                                <div className="text-sm text-slate-500 dark:text-slate-400">
+                                    Showing {((historyPage - 1) * 5) + 1} to {Math.min(historyPage * 5, data.count)} of {data.count} completed runs
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setHistoryPage(p => Math.max(1, p - 1))}
+                                        disabled={!data.previous}
+                                        className="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        title="Previous page"
+                                    >
+                                        <span className="material-symbols-outlined text-base">chevron_left</span>
+                                    </button>
+                                    <div className="flex items-center px-3 text-sm font-medium text-slate-700 dark:text-slate-300">
+                                        Page {historyPage} of {Math.ceil(data.count / 5)}
+                                    </div>
+                                    <button
+                                        onClick={() => setHistoryPage(p => p + 1)}
+                                        disabled={!data.next}
+                                        className="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        title="Next page"
+                                    >
+                                        <span className="material-symbols-outlined text-base">chevron_right</span>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
