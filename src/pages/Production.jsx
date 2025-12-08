@@ -1,52 +1,58 @@
 import React, { useState } from 'react';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
+import { toast } from 'sonner';
+
+import { useFetchQuery } from '../hooks/useFetchQuery';
+import { useCreateUpdateMutation } from '../hooks/useCreateUpdateMutation';
+import { fetchWithAuth } from '../utils/fetchApis';
+import { generateInvoiceHtml } from '../components/InvoiceTemplate';
 import StartProductionModal from '../components/StartProductionModal';
 import EndProductionModal from '../components/EndProductionModal';
 import ProductionDetailsModal from '../components/ProductionDetailsModal';
-import { generateInvoiceHtml } from '../components/InvoiceTemplate';
 
 const Production = () => {
-    // Dummy Data for History (Pre-populated) (Updated structure slightly for demo consistency if needed but keeping as is for now)
-    const [history, setHistory] = useState([
-        { id: 'PRD-84201', date: '2023-10-27 09:15', materials: [{ name: 'PET Preforms', quantity: 1000 }], matQty: '1,000', output: 'Water Bottle - 500ml', outQty: '1,000', efficiency: 98, Cost: '$250.00', status: 'Completed', waste: [{ name: 'PET Preforms', quantity: 20 }] },
-        { id: 'PRD-84200', date: '2023-10-26 14:30', materials: [{ name: 'HDPE Caps', quantity: 5000 }], matQty: '5,000', output: 'Caps Applied', outQty: '5,000', efficiency: 95, Cost: '$150.00', status: 'Completed', waste: [{ name: 'HDPE Caps', quantity: 250 }] },
-        { id: 'PRD-84199', date: '2023-10-26 11:00', materials: [{ name: 'Printed Labels', quantity: 2500 }], matQty: '2,500', output: 'Bottles Labeled', outQty: '2,500', efficiency: 88, Cost: '$75.50', status: 'Completed', waste: [{ name: 'Printed Labels', quantity: 340 }] },
-    ]);
-
-    // Active Runs State
-    const [activeRuns, setActiveRuns] = useState([]);
-
-    // Modal States
     const [isStartModalOpen, setIsStartModalOpen] = useState(false);
     const [isEndModalOpen, setIsEndModalOpen] = useState(false);
     const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
-
-    // Selection State
     const [currentRun, setCurrentRun] = useState(null);
     const [selectedHistoryRun, setSelectedHistoryRun] = useState(null);
 
-    const handleStartRun = (materials, shouldPrint) => {
-        const newRun = {
-            id: `PRD-${Math.floor(Math.random() * 100000)}`,
-            startDate: new Date(),
-            materials: materials,
-            status: 'In Progress'
+    // Fetch production batches
+    const { data, isFetching, isError, error, refetch } = useFetchQuery({
+        url: 'production/batches/',
+        queryKey: ['production-batches'],
+        fetchFunction: fetchWithAuth,
+        staleTime: 2 * 60 * 1000,
+    });
+
+    // Start production mutation
+    const startProductionMutation = useCreateUpdateMutation({
+        url: 'production/batches/start/',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        fetchFunction: fetchWithAuth,
+        onSuccessMessage: 'Production started successfully',
+        onErrorMessage: 'Failed to start production',
+        onSuccess: () => {
+            refetch();
+        },
+    });
+
+    const batches = data?.results || [];
+    const activeRuns = batches.filter(b => b.status === 'pending');
+    const history = batches.filter(b => b.status === 'completed');
+
+    const handleStartRun = (materials) => {
+        const payload = {
+            raw_materials: materials.map(m => ({
+                raw_material: parseInt(m.materialId),
+                quantity_used: parseFloat(m.quantity)
+            })),
+            notes: ''
         };
 
-        // Add to active runs
-        setActiveRuns([newRun, ...activeRuns]);
+        startProductionMutation.mutate(JSON.stringify(payload));
         setIsStartModalOpen(false);
-
-        // Print Invoice Optional
-        if (shouldPrint) {
-            const invoiceHtml = generateInvoiceHtml(newRun);
-            const printWindow = window.open('', '_blank');
-            if (printWindow) {
-                printWindow.document.write(invoiceHtml);
-                printWindow.document.close();
-            } else {
-                alert('Popup blocked. Please allow popups to print the invoice.');
-            }
-        }
     };
 
     const handleOpenEndModal = (run) => {
@@ -54,39 +60,36 @@ const Production = () => {
         setIsEndModalOpen(true);
     };
 
-    const handleEndRun = (resultData) => {
-        const outputQty = parseInt(resultData.outputQuantity || 0);
-        // Calculate total waste
-        const totalWaste = resultData.waste.reduce((acc, w) => acc + parseInt(w.quantity || 0), 0);
-
-        // Calculate Efficiency: Output / (Output + Waste) * 100
-        // Avoid division by zero
-        const totalProcessed = outputQty + totalWaste;
-        const efficiency = totalProcessed > 0 ? Math.round((outputQty / totalProcessed) * 100) : 0;
-
-        // Create completed entry
-        const completedRun = {
-            ...currentRun,
-            date: currentRun.startDate.toLocaleString(),
-            output: resultData.outputItemName,
-            outQty: outputQty.toLocaleString(), // Format nicely
-            // Format materials for table display (just showing first one + count for brevity in this simple table view)
-            materials: currentRun.materials[0].name + (currentRun.materials.length > 1 ? ` +${currentRun.materials.length - 1} more` : ''),
-            matQty: currentRun.materials.reduce((acc, curr) => acc + parseInt(curr.quantity || 0), 0).toLocaleString(),
-            efficiency: efficiency,
-            Cost: '$0.00', // Placeholder
-            status: 'Completed',
-            waste: resultData.waste
+    const handleEndRun = async (resultData) => {
+        const payload = {
+            product: parseInt(resultData.productId),
+            product_quantity: parseFloat(resultData.outputQuantity),
+            wastage: resultData.waste.map(w => ({
+                raw_material: parseInt(w.materialId),
+                quantity_wasted: parseFloat(w.quantity)
+            })),
+            notes: resultData.notes || ''
         };
 
-        // Update History
-        setHistory([completedRun, ...history]);
-
-        // Remove from Active Runs
-        setActiveRuns(activeRuns.filter(r => r.id !== currentRun.id));
-
-        setIsEndModalOpen(false);
-        setCurrentRun(null);
+        const loadingToast = toast.loading('Completing production...');
+        
+        try {
+            await fetchWithAuth(`production/batches/${currentRun.id}/end/`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            
+            toast.dismiss(loadingToast);
+            toast.success('Production completed successfully');
+            refetch();
+            setIsEndModalOpen(false);
+            setCurrentRun(null);
+        } catch (error) {
+            toast.dismiss(loadingToast);
+            toast.error('Failed to complete production');
+            console.error('Failed to end production:', error);
+        }
     };
 
     return (
@@ -115,7 +118,11 @@ const Production = () => {
                             Active Runs
                         </h2>
 
-                        {activeRuns.length === 0 ? (
+                        {isFetching ? (
+                            <div className="flex-1 flex items-center justify-center">
+                                <LoadingSpinner />
+                            </div>
+                        ) : activeRuns.length === 0 ? (
                             <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-center p-8 border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-lg">
                                 <span className="material-symbols-outlined text-4xl mb-2 text-slate-300">factory</span>
                                 <p>No production runs in progress.</p>
@@ -129,8 +136,8 @@ const Production = () => {
 
                                         <div className="flex justify-between items-start mb-2">
                                             <div>
-                                                <h3 className="font-bold text-slate-900 dark:text-white">{run.id}</h3>
-                                                <p className="text-xs text-slate-500">{new Date(run.startDate).toLocaleTimeString()}</p>
+                                                <h3 className="font-bold text-slate-900 dark:text-white">{run.batch_number}</h3>
+                                                <p className="text-xs text-slate-500">{new Date(run.start_date).toLocaleString()}</p>
                                             </div>
                                             <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full font-bold">In Progress</span>
                                         </div>
@@ -138,13 +145,17 @@ const Production = () => {
                                         <div className="mb-4">
                                             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Materials:</p>
                                             <ul className="text-sm text-slate-700 dark:text-slate-300 space-y-1">
-                                                {run.materials.map((m, idx) => (
+                                                {run.raw_materials?.map((m, idx) => (
                                                     <li key={idx} className="flex justify-between">
-                                                        <span>{m.name}</span>
-                                                        <span className="font-mono text-slate-500">x{m.quantity}</span>
+                                                        <span>{m.raw_material_name}</span>
+                                                        <span className="font-mono text-slate-500">x{m.quantity_used}</span>
                                                     </li>
                                                 ))}
                                             </ul>
+                                        </div>
+
+                                        <div className="text-xs text-slate-600 dark:text-slate-400 mb-3">
+                                            <span className="font-semibold">Total Cost:</span> ₹{parseFloat(run.total_cost).toFixed(2)}
                                         </div>
 
                                         <button
@@ -174,54 +185,66 @@ const Production = () => {
                             <table className="w-full text-sm text-left">
                                 <thead className="text-xs text-gray-500 dark:text-gray-400 uppercase bg-slate-50 dark:bg-background-dark border-b border-slate-200 dark:border-gray-700">
                                     <tr>
-                                        <th className="px-4 py-3" scope="col">Run ID</th>
+                                        <th className="px-4 py-3" scope="col">Batch ID</th>
                                         <th className="px-4 py-3" scope="col">Date/Time</th>
                                         <th className="px-4 py-3" scope="col">Raw Materials</th>
-                                        <th className="px-4 py-3 text-right" scope="col">Input Qty</th>
-                                        <th className="px-4 py-3" scope="col">Finished Good</th>
+                                        <th className="px-4 py-3" scope="col">Product</th>
                                         <th className="px-4 py-3 text-right" scope="col">Output Qty</th>
                                         <th className="px-4 py-3 text-center" scope="col">Efficiency</th>
                                         <th className="px-4 py-3" scope="col">Waste</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {history.map((run, index) => (
-                                        <tr
-                                            key={index}
-                                            onClick={() => {
-                                                setSelectedHistoryRun(run);
-                                                setIsDetailsModalOpen(true);
-                                            }}
-                                            className="border-b border-slate-200 dark:border-gray-700 hover:bg-slate-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer group"
-                                        >
-                                            <td className="px-4 py-3 font-mono text-xs text-slate-900 dark:text-white font-medium group-hover:text-eva-blue transition-colors">{run.id}</td>
-                                            <td className="px-4 py-3 text-slate-500 dark:text-gray-400">{run.date}</td>
-                                            <td className="px-4 py-3 text-slate-900 dark:text-white">
-                                                {Array.isArray(run.materials) ? run.materials.map(m => m.name).join(', ') : run.materials}
-                                            </td>
-                                            <td className="px-4 py-3 text-right text-slate-600 dark:text-slate-400 font-semibold">{run.matQty}</td>
-                                            <td className="px-4 py-3 text-slate-900 dark:text-white">{run.output}</td>
-                                            <td className="px-4 py-3 text-right text-slate-900 dark:text-white font-bold">{run.outQty}</td>
-                                            <td className="px-4 py-3 text-center">
-                                                <span className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-bold
-                                                    ${run.efficiency >= 95 ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
-                                                        run.efficiency >= 85 ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
-                                                            run.efficiency >= 70 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                                                                'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'}`}>
-                                                    {run.efficiency}%
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-3 text-xs">
-                                                {run.waste && run.waste.length > 0 ? (
-                                                    <div className="flex flex-col gap-1">
-                                                        {run.waste.map((w, i) => (
-                                                            <span key={i} className="text-red-500 dark:text-red-400">{w.name}: {w.quantity}</span>
-                                                        ))}
-                                                    </div>
-                                                ) : <span className="text-green-500">None</span>}
+                                    {isFetching ? (
+                                        <tr>
+                                            <td colSpan="7" className="px-4 py-8 text-center">
+                                                <LoadingSpinner />
                                             </td>
                                         </tr>
-                                    ))}
+                                    ) : history.length === 0 ? (
+                                        <tr>
+                                            <td colSpan="7" className="px-4 py-8 text-center text-slate-400">
+                                                No completed production runs yet
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        history.map((run) => (
+                                            <tr
+                                                key={run.id}
+                                                onClick={() => {
+                                                    setSelectedHistoryRun(run);
+                                                    setIsDetailsModalOpen(true);
+                                                }}
+                                                className="border-b border-slate-200 dark:border-gray-700 hover:bg-slate-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer group"
+                                            >
+                                                <td className="px-4 py-3 font-mono text-xs text-slate-900 dark:text-white font-medium group-hover:text-eva-blue transition-colors">{run.batch_number}</td>
+                                                <td className="px-4 py-3 text-slate-500 dark:text-gray-400">{new Date(run.end_date).toLocaleString()}</td>
+                                                <td className="px-4 py-3 text-slate-900 dark:text-white">
+                                                    {run.raw_materials?.map(m => m.raw_material_name).join(', ')}
+                                                </td>
+                                                <td className="px-4 py-3 text-slate-900 dark:text-white">{run.product_name}</td>
+                                                <td className="px-4 py-3 text-right text-slate-900 dark:text-white font-bold">{run.product_quantity}</td>
+                                                <td className="px-4 py-3 text-center">
+                                                    <span className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-bold
+                                                        ${run.efficiency >= 95 ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
+                                                            run.efficiency >= 85 ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
+                                                                run.efficiency >= 70 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                                                                    'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'}`}>
+                                                        {run.efficiency}%
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 text-xs">
+                                                    {run.raw_materials?.some(m => m.quantity_wasted > 0) ? (
+                                                        <div className="flex flex-col gap-1">
+                                                            {run.raw_materials.filter(m => m.quantity_wasted > 0).map((m, i) => (
+                                                                <span key={i} className="text-red-500 dark:text-red-400">{m.raw_material_name}: {m.quantity_wasted}</span>
+                                                            ))}
+                                                        </div>
+                                                    ) : <span className="text-green-500">None</span>}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
                                 </tbody>
                             </table>
                         </div>
