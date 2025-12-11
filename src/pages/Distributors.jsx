@@ -6,11 +6,14 @@ import { fetchWithAuth } from '../utils/fetchApis';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import AddDistributorModal from '../components/AddDistributorModal';
 import CreateInvoiceModal from '../components/CreateInvoiceModal';
+import InvoiceDetailsModal from '../components/InvoiceDetailsModal';
 
 const Distributors = () => {
     const [activeTab, setActiveTab] = useState('history');
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
+    const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+    const [selectedInvoice, setSelectedInvoice] = useState(null);
     const [selectedDistributor, setSelectedDistributor] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [invoicePage, setInvoicePage] = useState(1);
@@ -63,11 +66,15 @@ const Distributors = () => {
         onSuccess: async () => {
             await refetchInvoices();
             await refetchDistributors();
-            // Update selected distributor with fresh data
-            const updatedDistributor = distributorsData?.results?.find(d => d.id === selectedDistributor?.id);
-            if (updatedDistributor) {
-                setSelectedDistributor(updatedDistributor);
-            }
+            // Use callback to get fresh distributor state
+            setSelectedDistributor(prev => {
+                if (prev) {
+                    fetchWithAuth(`distributors/${prev.id}/`)
+                        .then(response => setSelectedDistributor(response))
+                        .catch(error => console.error('Failed to update distributor:', error));
+                }
+                return prev;
+            });
             setIsInvoiceModalOpen(false);
         },
     });
@@ -91,6 +98,25 @@ const Distributors = () => {
     const handleTabChange = (tab) => {
         setActiveTab(tab);
         setInvoicePage(1);
+    };
+
+    const handleInvoiceClick = async (invoice) => {
+        // If it's a payment, fetch and show the parent sale invoice
+        if (invoice.transaction_type === 'payment' && invoice.related_invoice) {
+            try {
+                const parentInvoice = await fetchWithAuth(`distributors/invoices/${invoice.related_invoice}/`);
+                setSelectedInvoice(parentInvoice);
+                setIsDetailsModalOpen(true);
+            } catch (error) {
+                console.error('Failed to fetch parent invoice:', error);
+                // Fallback to showing the payment invoice
+                setSelectedInvoice(invoice);
+                setIsDetailsModalOpen(true);
+            }
+        } else {
+            setSelectedInvoice(invoice);
+            setIsDetailsModalOpen(true);
+        }
     };
 
     return (
@@ -287,8 +313,19 @@ const Distributors = () => {
                                                         </tr>
                                                     ) : (
                                                         invoices.map((invoice) => (
-                                                            <tr key={invoice.id} className="border-b border-slate-200 dark:border-gray-700 hover:bg-slate-50 dark:hover:bg-gray-800/50 transition-colors">
-                                                                <td className="px-4 py-3 font-mono text-xs text-eva-blue font-medium">{invoice.invoice_number}</td>
+                                                            <tr 
+                                                                key={invoice.id} 
+                                                                onClick={() => handleInvoiceClick(invoice)}
+                                                                className="border-b border-slate-200 dark:border-gray-700 hover:bg-slate-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer group"
+                                                            >
+                                                                <td className="px-4 py-3">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="font-mono text-xs text-eva-blue font-medium group-hover:underline">{invoice.invoice_number}</span>
+                                                                        {invoice.transaction_type === 'payment' && invoice.related_invoice_number && (
+                                                                            <span className="text-xs text-slate-500 dark:text-slate-400">→ {invoice.related_invoice_number}</span>
+                                                                        )}
+                                                                    </div>
+                                                                </td>
                                                                 <td className="px-4 py-3 text-slate-500 dark:text-gray-400">{new Date(invoice.created_at).toLocaleDateString()}</td>
                                                                 <td className="px-4 py-3">
                                                                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${invoice.transaction_type === 'sale'
@@ -356,6 +393,12 @@ const Distributors = () => {
                 onClose={() => setIsInvoiceModalOpen(false)}
                 onCreate={handleCreateInvoice}
                 selectedDistributor={selectedDistributor}
+            />
+
+            <InvoiceDetailsModal
+                isOpen={isDetailsModalOpen}
+                onClose={() => setIsDetailsModalOpen(false)}
+                invoice={selectedInvoice}
             />
         </div>
     );
