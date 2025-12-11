@@ -6,6 +6,8 @@ const CreateInvoiceModal = ({ isOpen, onClose, onCreate, selectedDistributor }) 
     const [transactionType, setTransactionType] = useState('sale');
     const [paymentType, setPaymentType] = useState('credit');
     const [amountPaid, setAmountPaid] = useState('');
+    const [relatedInvoice, setRelatedInvoice] = useState('');
+    const [invoiceSearchQuery, setInvoiceSearchQuery] = useState('');
     const [notes, setNotes] = useState('');
     const [items, setItems] = useState([{ id: Date.now(), product: '', quantity: '', unitPrice: '' }]);
 
@@ -14,10 +16,25 @@ const CreateInvoiceModal = ({ isOpen, onClose, onCreate, selectedDistributor }) 
         url: 'production/products/',
         queryKey: ['products'],
         fetchFunction: fetchWithAuth,
-        enabled: isOpen,
+        enabled: isOpen && transactionType === 'sale',
+    });
+
+    // Fetch pending sale invoices for payment
+    const { data: pendingInvoicesData } = useFetchQuery({
+        url: selectedDistributor ? `distributors/invoices/pending/?distributor=${selectedDistributor.id}` : null,
+        queryKey: ['pending-invoices', selectedDistributor?.id],
+        fetchFunction: fetchWithAuth,
+        enabled: isOpen && transactionType === 'payment' && !!selectedDistributor,
     });
 
     const products = productsData?.results || [];
+    const allPendingInvoices = pendingInvoicesData?.results || [];
+    
+    // Filter pending invoices by search query
+    const pendingInvoices = allPendingInvoices.filter(inv => 
+        inv.invoice_number.toLowerCase().includes(invoiceSearchQuery.toLowerCase()) ||
+        parseFloat(inv.balance_due).toFixed(2).includes(invoiceSearchQuery)
+    );
 
     const handleAddItem = () => {
         setItems([...items, { id: Date.now(), product: '', quantity: '', unitPrice: '' }]);
@@ -55,12 +72,11 @@ const CreateInvoiceModal = ({ isOpen, onClose, onCreate, selectedDistributor }) 
         const payload = {
             distributor: selectedDistributor?.id,
             transaction_type: transactionType,
-            payment_type: paymentType,
-            amount_paid: parseFloat(amountPaid || 0),
             notes: notes,
         };
 
         if (transactionType === 'sale') {
+            payload.payment_type = paymentType;
             payload.items = items
                 .filter(item => item.product && item.quantity && item.unitPrice)
                 .map(item => ({
@@ -68,6 +84,15 @@ const CreateInvoiceModal = ({ isOpen, onClose, onCreate, selectedDistributor }) 
                     quantity: parseFloat(item.quantity),
                     unit_price: parseFloat(item.unitPrice)
                 }));
+            
+            // Only send amount_paid for credit type
+            if (paymentType === 'credit') {
+                payload.amount_paid = parseFloat(amountPaid || 0);
+            }
+        } else {
+            // Payment is always debit
+            payload.amount_paid = parseFloat(amountPaid);
+            payload.related_invoice = parseInt(relatedInvoice);
         }
 
         onCreate(payload);
@@ -76,6 +101,8 @@ const CreateInvoiceModal = ({ isOpen, onClose, onCreate, selectedDistributor }) 
         setTransactionType('sale');
         setPaymentType('credit');
         setAmountPaid('');
+        setRelatedInvoice('');
+        setInvoiceSearchQuery('');
         setNotes('');
         setItems([{ id: Date.now(), product: '', quantity: '', unitPrice: '' }]);
     };
@@ -105,7 +132,11 @@ const CreateInvoiceModal = ({ isOpen, onClose, onCreate, selectedDistributor }) 
                             <select
                                 required
                                 value={transactionType}
-                                onChange={(e) => setTransactionType(e.target.value)}
+                                onChange={(e) => {
+                                    setTransactionType(e.target.value);
+                                    setAmountPaid('');
+                                    setRelatedInvoice('');
+                                }}
                                 className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-eva-blue outline-none text-slate-900 dark:text-white"
                             >
                                 <option value="sale">Sale</option>
@@ -113,21 +144,79 @@ const CreateInvoiceModal = ({ isOpen, onClose, onCreate, selectedDistributor }) 
                             </select>
                         </div>
 
-                        <div>
+                        {/* Only show payment type for sales */}
+                        {transactionType === 'sale' && (
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                                    Payment Type *
+                                </label>
+                                <select
+                                    required
+                                    value={paymentType}
+                                    onChange={(e) => {
+                                        setPaymentType(e.target.value);
+                                        setAmountPaid('');
+                                    }}
+                                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-eva-blue outline-none text-slate-900 dark:text-white"
+                                >
+                                    <option value="credit">Credit (Partial/Full)</option>
+                                    <option value="debit">Debit (Full Payment)</option>
+                                </select>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                    {paymentType === 'debit' ? 'Full payment after using available credit' : 'Partial payment allowed'}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Select Invoice for Payment */}
+                    {transactionType === 'payment' && (
+                        <div className="space-y-2">
                             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
-                                Payment Type *
+                                Select Sale Invoice *
                             </label>
+                            
+                            {/* Search Input */}
+                            {allPendingInvoices.length > 3 && (
+                                <div className="relative">
+                                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">search</span>
+                                    <input
+                                        type="text"
+                                        placeholder="Search invoice number or amount..."
+                                        value={invoiceSearchQuery}
+                                        onChange={(e) => setInvoiceSearchQuery(e.target.value)}
+                                        className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs focus:ring-2 focus:ring-eva-blue outline-none text-slate-900 dark:text-white"
+                                    />
+                                </div>
+                            )}
+                            
+                            {/* Invoice Selector */}
                             <select
                                 required
-                                value={paymentType}
-                                onChange={(e) => setPaymentType(e.target.value)}
+                                value={relatedInvoice}
+                                onChange={(e) => setRelatedInvoice(e.target.value)}
                                 className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-eva-blue outline-none text-slate-900 dark:text-white"
+                                size={pendingInvoices.length > 5 ? 6 : Math.max(2, pendingInvoices.length + 1)}
                             >
-                                <option value="credit">Credit</option>
-                                <option value="debit">Debit</option>
+                                <option value="">Choose invoice to pay</option>
+                                {pendingInvoices.map(invoice => (
+                                    <option key={invoice.id} value={invoice.id}>
+                                        {invoice.invoice_number} - Due: ₹{parseFloat(invoice.balance_due).toFixed(2)} ({new Date(invoice.created_at).toLocaleDateString()})
+                                    </option>
+                                ))}
                             </select>
+                            
+                            {allPendingInvoices.length === 0 ? (
+                                <p className="text-xs text-amber-600 dark:text-amber-400">
+                                    No pending credit invoices for this distributor
+                                </p>
+                            ) : (
+                                <p className="text-xs text-slate-500 dark:text-slate-400">
+                                    {pendingInvoices.length} of {allPendingInvoices.length} invoices shown
+                                </p>
+                            )}
                         </div>
-                    </div>
+                    )}
 
                     {/* Items Section - Only for Sales */}
                     {transactionType === 'sale' && (
@@ -225,32 +314,59 @@ const CreateInvoiceModal = ({ isOpen, onClose, onCreate, selectedDistributor }) 
                         </div>
                     )}
 
-                    {/* Amount Paid */}
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
-                            Amount Paid {transactionType === 'payment' ? '*' : '(Optional)'}
-                        </label>
-                        <input
-                            required={transactionType === 'payment'}
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={amountPaid}
-                            onChange={(e) => {
-                                const value = e.target.value;
-                                if (value === '' || parseFloat(value) >= 0) {
-                                    setAmountPaid(value);
-                                }
-                            }}
-                            className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-eva-blue outline-none text-slate-900 dark:text-white"
-                            placeholder="Enter amount paid"
-                        />
-                        {transactionType === 'sale' && (
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                Leave empty for full credit, or enter partial payment
-                            </p>
-                        )}
-                    </div>
+                    {/* Amount Paid - Only show for payment or credit type sale */}
+                    {(transactionType === 'payment' || (transactionType === 'sale' && paymentType === 'credit')) && (
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                                Amount Paid {transactionType === 'payment' ? '*' : '(Optional)'}
+                            </label>
+                            <input
+                                required={transactionType === 'payment'}
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={amountPaid}
+                                onChange={(e) => {
+                                    const value = e.target.value;
+                                    if (value === '' || parseFloat(value) >= 0) {
+                                        setAmountPaid(value);
+                                    }
+                                }}
+                                className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-eva-blue outline-none text-slate-900 dark:text-white"
+                                placeholder={transactionType === 'payment' ? 'Enter payment amount' : 'Enter partial payment (optional)'}
+                            />
+                            {transactionType === 'sale' && paymentType === 'credit' && (
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                    Leave empty for full credit, or enter partial payment
+                                </p>
+                            )}
+                            {transactionType === 'payment' && (
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                    Excess payment will be added to available balance
+                                </p>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Info for debit type sale */}
+                    {transactionType === 'sale' && paymentType === 'debit' && (
+                        <div className="bg-green-50 dark:bg-green-900/10 p-4 rounded-lg border border-green-200 dark:border-green-800">
+                            <div className="flex items-start gap-2">
+                                <span className="material-symbols-outlined text-green-600 dark:text-green-400 text-lg">info</span>
+                                <div>
+                                    <p className="text-sm font-semibold text-green-800 dark:text-green-400">Full Payment</p>
+                                    <p className="text-xs text-green-700 dark:text-green-500 mt-1">
+                                        Available credit will be used first, remaining amount will be paid in full
+                                    </p>
+                                    {selectedDistributor && parseFloat(selectedDistributor.balance) > 0 && (
+                                        <p className="text-xs text-green-700 dark:text-green-500 mt-1">
+                                            Available Credit: ₹{parseFloat(selectedDistributor.balance).toFixed(2)}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Notes */}
                     <div>
