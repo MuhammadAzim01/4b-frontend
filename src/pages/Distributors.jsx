@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { useFetchQuery } from '../hooks/useFetchQuery';
 import { useCreateUpdateMutation } from '../hooks/useCreateUpdateMutation';
 import { fetchWithAuth } from '../utils/fetchApis';
+import { getAuthStatus } from '../utils/auth';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import AddDistributorModal from '../components/AddDistributorModal';
 import CreateInvoiceModal from '../components/CreateInvoiceModal';
@@ -17,6 +18,9 @@ const Distributors = () => {
     const [selectedDistributor, setSelectedDistributor] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [invoicePage, setInvoicePage] = useState(1);
+
+    const { user } = getAuthStatus();
+    const isAdmin = user?.role === 'admin';
 
     // Fetch distributors
     const { data: distributorsData, isFetching: loadingDistributors, refetch: refetchDistributors } = useFetchQuery({
@@ -66,7 +70,7 @@ const Distributors = () => {
         onSuccess: async () => {
             // Refresh distributor list
             await refetchDistributors();
-            
+
             // Update selected distributor with fresh data before refetching invoices
             if (selectedDistributor?.id) {
                 try {
@@ -78,8 +82,33 @@ const Distributors = () => {
                     console.error('Failed to update distributor:', error);
                 }
             }
-            
+
             setIsInvoiceModalOpen(false);
+        },
+    });
+
+    // Toggle status mutation
+    const toggleStatusMutation = useCreateUpdateMutation({
+        url: (data) => {
+            try {
+                const parsedData = typeof data === 'string' ? JSON.parse(data) : data;
+                return `distributors/${parsedData.id}/`;
+            } catch (error) {
+                console.error('Error parsing data for URL:', error);
+                return 'distributors/';
+            }
+        },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        fetchFunction: fetchWithAuth,
+        onSuccessMessage: 'Distributor status updated',
+        onErrorMessage: 'Failed to update status',
+        onSuccess: async () => {
+            await refetchDistributors();
+            // Update selected distributor
+            if (selectedDistributor?.id) {
+                setSelectedDistributor(prev => ({ ...prev, is_active: !prev.is_active }));
+            }
         },
     });
 
@@ -92,6 +121,14 @@ const Distributors = () => {
 
     const handleCreateInvoice = (payload) => {
         createInvoiceMutation.mutate(JSON.stringify(payload));
+    };
+
+    const handleToggleActive = () => {
+        if (!selectedDistributor) return;
+        toggleStatusMutation.mutate(JSON.stringify({
+            id: selectedDistributor.id,
+            is_active: !selectedDistributor.is_active
+        }));
     };
 
     const handleSelectDistributor = (distributor) => {
@@ -254,6 +291,21 @@ const Distributors = () => {
                                         <span className="material-symbols-outlined text-base">receipt_long</span>
                                         Create Invoice
                                     </button>
+                                    {isAdmin && (
+                                        <button
+                                            onClick={handleToggleActive}
+                                            disabled={toggleStatusMutation.isPending}
+                                            className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-lg transition-colors border ${selectedDistributor.is_active
+                                                ? 'text-red-600 border-red-200 hover:bg-red-50 dark:hover:bg-red-900/20'
+                                                : 'text-green-600 border-green-200 hover:bg-green-50 dark:hover:bg-green-900/20'
+                                                }`}
+                                        >
+                                            <span className="material-symbols-outlined text-base">
+                                                {selectedDistributor.is_active ? 'block' : 'check_circle'}
+                                            </span>
+                                            {selectedDistributor.is_active ? 'Deactivate' : 'Activate'}
+                                        </button>
+                                    )}
                                 </div>
                             </div>
 
@@ -264,8 +316,8 @@ const Distributors = () => {
                                         <button
                                             onClick={() => handleTabChange('history')}
                                             className={`py-4 px-2 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'history'
-                                                    ? 'border-eva-blue text-eva-blue'
-                                                    : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
+                                                ? 'border-eva-blue text-eva-blue'
+                                                : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
                                                 }`}
                                         >
                                             All Transactions
@@ -273,8 +325,8 @@ const Distributors = () => {
                                         <button
                                             onClick={() => handleTabChange('sales')}
                                             className={`py-4 px-2 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'sales'
-                                                    ? 'border-eva-blue text-eva-blue'
-                                                    : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
+                                                ? 'border-eva-blue text-eva-blue'
+                                                : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
                                                 }`}
                                         >
                                             Sales
@@ -282,8 +334,8 @@ const Distributors = () => {
                                         <button
                                             onClick={() => handleTabChange('payments')}
                                             className={`py-4 px-2 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'payments'
-                                                    ? 'border-eva-blue text-eva-blue'
-                                                    : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
+                                                ? 'border-eva-blue text-eva-blue'
+                                                : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
                                                 }`}
                                         >
                                             Payments
@@ -318,8 +370,8 @@ const Distributors = () => {
                                                         </tr>
                                                     ) : (
                                                         invoices.map((invoice) => (
-                                                            <tr 
-                                                                key={invoice.id} 
+                                                            <tr
+                                                                key={invoice.id}
                                                                 onClick={() => handleInvoiceClick(invoice)}
                                                                 className="border-b border-slate-200 dark:border-gray-700 hover:bg-slate-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer group"
                                                             >
@@ -334,8 +386,8 @@ const Distributors = () => {
                                                                 <td className="px-4 py-3 text-slate-500 dark:text-gray-400">{new Date(invoice.created_at).toLocaleDateString()}</td>
                                                                 <td className="px-4 py-3">
                                                                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${invoice.transaction_type === 'sale'
-                                                                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300'
-                                                                            : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
+                                                                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300'
+                                                                        : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
                                                                         }`}>
                                                                         {invoice.transaction_type === 'sale' ? 'Sale' : 'Payment'} - {invoice.payment_type}
                                                                     </span>
