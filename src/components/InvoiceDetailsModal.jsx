@@ -2,7 +2,7 @@ import React from 'react';
 
 const InvoiceDetailsModal = ({ isOpen, onClose, invoice }) => {
     if (!isOpen || !invoice) return null;
-    invoice = invoice?.data;
+    invoice = invoice?.data || invoice;
     const isSale = invoice.transaction_type === 'sale';
 
     return (

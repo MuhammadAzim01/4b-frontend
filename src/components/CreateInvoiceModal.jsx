@@ -1,40 +1,42 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useFetchQuery } from '../hooks/useFetchQuery';
 import { fetchWithAuth } from '../utils/fetchApis';
+import LoadingSpinner from './ui/LoadingSpinner';
 
-const CreateInvoiceModal = ({ isOpen, onClose, onCreate, selectedDistributor }) => {
+const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
     const [transactionType, setTransactionType] = useState('sale');
     const [paymentType, setPaymentType] = useState('credit');
     const [amountPaid, setAmountPaid] = useState('');
-    const [relatedInvoice, setRelatedInvoice] = useState('');
-    const [invoiceSearchQuery, setInvoiceSearchQuery] = useState('');
+    const [selectedInvoices, setSelectedInvoices] = useState([]);
     const [notes, setNotes] = useState('');
     const [items, setItems] = useState([{ id: Date.now(), product: '', quantity: '', unitPrice: '' }]);
+    const [invoiceSearch, setInvoiceSearch] = useState('');
 
-    // Fetch available products
-    const { data: productsData } = useFetchQuery({
+    const { data: products, isFetching: productsLoading } = useFetchQuery({
         url: 'production/products/',
         queryKey: ['products'],
         fetchFunction: fetchWithAuth,
         enabled: isOpen && transactionType === 'sale',
     });
 
-    // Fetch pending sale invoices for payment
-    const { data: pendingInvoicesData } = useFetchQuery({
-        url: selectedDistributor ? `distributors/invoices/pending/?distributor=${selectedDistributor.id}` : null,
-        queryKey: ['pending-invoices', selectedDistributor?.id],
+    const { data: pendingInvoices, isFetching: invoicesLoading } = useFetchQuery({
+        url: `distributors/invoices/pending/?distributor=${distributor?.id}`,
+        queryKey: ['pending-invoices', distributor?.id],
         fetchFunction: fetchWithAuth,
-        enabled: isOpen && transactionType === 'payment' && !!selectedDistributor,
+        enabled: isOpen && transactionType === 'payment' && !!distributor?.id,
     });
 
-    const products = productsData?.results || [];
-    const allPendingInvoices = pendingInvoicesData?.results || [];
-    
-    // Filter pending invoices by search query
-    const pendingInvoices = allPendingInvoices.filter(inv => 
-        inv.invoice_number.toLowerCase().includes(invoiceSearchQuery.toLowerCase()) ||
-        parseFloat(inv.balance_due).toFixed(2).includes(invoiceSearchQuery)
-    );
+    useEffect(() => {
+        if (isOpen) {
+            setTransactionType('sale');
+            setPaymentType('credit');
+            setAmountPaid('');
+            setSelectedInvoices([]);
+            setNotes('');
+            setItems([{ id: Date.now(), product: '', quantity: '', unitPrice: '' }]);
+            setInvoiceSearch('');
+        }
+    }, [isOpen]);
 
     const handleAddItem = () => {
         setItems([...items, { id: Date.now(), product: '', quantity: '', unitPrice: '' }]);
@@ -50,11 +52,27 @@ const CreateInvoiceModal = ({ isOpen, onClose, onCreate, selectedDistributor }) 
         setItems(items.map(item => item.id === id ? { ...item, [field]: value } : item));
     };
 
-    const getAvailableProducts = (currentProductId) => {
-        const selectedIds = items.map(item => item.product).filter(id => id !== currentProductId);
-        return products.filter(p => !selectedIds.includes(p.id.toString()));
+    const handleInvoiceToggle = (invoiceId) => {
+        setSelectedInvoices(prev =>
+            prev.includes(invoiceId)
+                ? prev.filter(id => id !== invoiceId)
+                : [...prev, invoiceId]
+        );
     };
 
+    const filteredPendingInvoices = pendingInvoices?.results?.filter(inv =>
+        inv.invoice_number.toLowerCase().includes(invoiceSearch.toLowerCase()) ||
+        inv.balance_due.toString().includes(invoiceSearch)
+    ) || [];
+
+    const totalDue = selectedInvoices.reduce((sum, invoiceId) => {
+        const invoice = pendingInvoices?.results?.find(inv => inv.id === invoiceId);
+        return sum + (Number(invoice?.balance_due || 0));
+    }, 0);
+
+    
+    const paymentDifference = parseFloat(amountPaid || 0) - totalDue;
+    
     const getTotalAmount = () => {
         if (transactionType === 'payment') {
             return parseFloat(amountPaid || 0);
@@ -68,46 +86,34 @@ const CreateInvoiceModal = ({ isOpen, onClose, onCreate, selectedDistributor }) 
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        
-        const payload = {
-            distributor: selectedDistributor?.id,
-            transaction_type: transactionType,
-            notes: notes,
-        };
 
         if (transactionType === 'sale') {
-            payload.payment_type = paymentType;
-            payload.items = items
-                .filter(item => item.product && item.quantity && item.unitPrice)
-                .map(item => ({
-                    product: parseInt(item.product),
-                    quantity: parseFloat(item.quantity),
-                    unit_price: parseFloat(item.unitPrice)
-                }));
-            
-            // Only send amount_paid for credit type
-            if (paymentType === 'credit') {
-                payload.amount_paid = parseFloat(amountPaid || 0);
-            }
-        } else {
-            // Payment is always debit
-            payload.amount_paid = parseFloat(amountPaid);
-            payload.related_invoice = parseInt(relatedInvoice);
-        }
+            const formattedItems = items.map(item => ({
+                product: parseInt(item.product),
+                quantity: parseFloat(item.quantity),
+                unit_price: parseFloat(item.unitPrice)
+            }));
 
-        onCreate(payload);
-        
-        // Reset form
-        setTransactionType('sale');
-        setPaymentType('credit');
-        setAmountPaid('');
-        setRelatedInvoice('');
-        setInvoiceSearchQuery('');
-        setNotes('');
-        setItems([{ id: Date.now(), product: '', quantity: '', unitPrice: '' }]);
+            onSubmit({
+                distributor: distributor.id,
+                transaction_type: transactionType,
+                payment_type: paymentType,
+                amount_paid: paymentType === 'debit' ? 0 : parseFloat(amountPaid || 0),
+                items: formattedItems,
+                notes
+            });
+        } else {
+            onSubmit({
+                distributor: distributor.id,
+                transaction_type: transactionType,
+                amount_paid: parseFloat(amountPaid),
+                related_invoices: selectedInvoices,
+                notes
+            });
+        }
     };
 
-    if (!isOpen || !selectedDistributor) return null;
+    if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -115,7 +121,7 @@ const CreateInvoiceModal = ({ isOpen, onClose, onCreate, selectedDistributor }) 
                 <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
                     <div>
                         <h2 className="text-xl font-bold text-slate-900 dark:text-white">Create Invoice</h2>
-                        <p className="text-sm text-slate-500">For: <span className="font-medium text-slate-700 dark:text-slate-300">{selectedDistributor?.name}</span></p>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">{distributor?.name}</p>
                     </div>
                     <button onClick={onClose} className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white">
                         <span className="material-symbols-outlined">close</span>
@@ -123,262 +129,227 @@ const CreateInvoiceModal = ({ isOpen, onClose, onCreate, selectedDistributor }) 
                 </div>
 
                 <form onSubmit={handleSubmit} className="p-6 space-y-6">
-                    {/* Transaction Type */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
-                                Transaction Type *
-                            </label>
-                            <select
-                                required
-                                value={transactionType}
-                                onChange={(e) => {
-                                    setTransactionType(e.target.value);
-                                    setAmountPaid('');
-                                    setRelatedInvoice('');
-                                }}
-                                className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-eva-blue outline-none text-slate-900 dark:text-white"
-                            >
-                                <option value="sale">Sale</option>
-                                <option value="payment">Payment</option>
-                            </select>
-                        </div>
-
-                        {/* Only show payment type for sales */}
-                        {transactionType === 'sale' && (
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
-                                    Payment Type *
-                                </label>
-                                <select
-                                    required
-                                    value={paymentType}
-                                    onChange={(e) => {
-                                        setPaymentType(e.target.value);
-                                        setAmountPaid('');
-                                    }}
-                                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-eva-blue outline-none text-slate-900 dark:text-white"
-                                >
-                                    <option value="credit">Credit (Partial/Full)</option>
-                                    <option value="debit">Debit (Full Payment)</option>
-                                </select>
-                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                    {paymentType === 'debit' ? 'Full payment after using available credit' : 'Partial payment allowed'}
-                                </p>
-                            </div>
-                        )}
+                    <div className="flex gap-4 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
+                        <button
+                            type="button"
+                            onClick={() => setTransactionType('sale')}
+                            className={`flex-1 py-2 px-4 rounded-md text-sm font-semibold transition-colors ${transactionType === 'sale'
+                                ? 'bg-white dark:bg-slate-700 text-eva-blue shadow'
+                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+                        >
+                            Sale
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setTransactionType('payment')}
+                            className={`flex-1 py-2 px-4 rounded-md text-sm font-semibold transition-colors ${transactionType === 'payment'
+                                ? 'bg-white dark:bg-slate-700 text-eva-blue shadow'
+                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+                        >
+                            Payment
+                        </button>
                     </div>
 
-                    {/* Select Invoice for Payment */}
-                    {transactionType === 'payment' && (
-                        <div className="space-y-2">
-                            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
-                                Select Sale Invoice *
-                            </label>
-                            
-                            {/* Search Input */}
-                            {allPendingInvoices.length > 3 && (
-                                <div className="relative">
-                                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">search</span>
+                    {transactionType === 'sale' ? (
+                        <>
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Payment Type</label>
+                                <div className="flex gap-4">
+                                    <label className="flex items-center">
+                                        <input
+                                            type="radio"
+                                            value="credit"
+                                            checked={paymentType === 'credit'}
+                                            onChange={(e) => setPaymentType(e.target.value)}
+                                            className="mr-2"
+                                        />
+                                        <span className="text-sm text-slate-700 dark:text-slate-300">Credit</span>
+                                    </label>
+                                    <label className="flex items-center">
+                                        <input
+                                            type="radio"
+                                            value="debit"
+                                            checked={paymentType === 'debit'}
+                                            onChange={(e) => setPaymentType(e.target.value)}
+                                            className="mr-2"
+                                        />
+                                        <span className="text-sm text-slate-700 dark:text-slate-300">Debit (Full Payment)</span>
+                                    </label>
+                                </div>
+                                {paymentType === 'debit' && distributor?.balance > 0 && (
+                                    <p className="mt-2 text-xs text-green-600 dark:text-green-400">
+                                        ℹ️ Available credit (₹{distributor.balance}) will be used first
+                                    </p>
+                                )}
+                            </div>
+
+                            <div>
+                                <div className="flex justify-between items-center mb-2">
+                                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Products</label>
+                                    <button
+                                        type="button"
+                                        onClick={handleAddItem}
+                                        className="text-xs font-bold text-eva-blue hover:underline flex items-center gap-1"
+                                    >
+                                        <span className="material-symbols-outlined text-sm">add</span> Add Product
+                                    </button>
+                                </div>
+                                {items.map((item) => (
+                                    <div key={item.id} className="flex gap-2 mb-2">
+                                        <select
+                                            required
+                                            value={item.product}
+                                            onChange={(e) => handleItemChange(item.id, 'product', e.target.value)}
+                                            className="flex-1 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
+                                        >
+                                            <option value="">Select Product</option>
+                                            {products?.results?.map(p => (
+                                                <option key={p.id} value={p.id}>{p.name} (Avl: {p.available_quantity})</option>
+                                            ))}
+                                        </select>
+                                        <input
+                                            required
+                                            type="number"
+                                            placeholder="Qty"
+                                            min="0.01"
+                                            step="0.01"
+                                            value={item.quantity}
+                                            onChange={(e) => handleItemChange(item.id, 'quantity', e.target.value)}
+                                            className="w-24 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
+                                        />
+                                        <input
+                                            required
+                                            type="number"
+                                            placeholder="Price"
+                                            min="0.01"
+                                            step="0.01"
+                                            value={item.unitPrice}
+                                            onChange={(e) => handleItemChange(item.id, 'unitPrice', e.target.value)}
+                                            className="w-28 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
+                                        />
+                                        {items.length > 1 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => handleRemoveItem(item.id)}
+                                                className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
+                                            >
+                                                <span className="material-symbols-outlined text-lg">delete</span>
+                                            </button>
+                                        )}
+                                    </div>
+                                ))}
+                                <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-800 flex justify-between items-center">
+                                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Total Amount:</span>
+                                    <span className="text-lg font-bold text-eva-blue">₹{getTotalAmount().toFixed(2)}</span>
+                                </div>
+                            </div>
+
+                            {paymentType === 'credit' && (
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Amount Paid (Partial)</label>
                                     <input
-                                        type="text"
-                                        placeholder="Search invoice number or amount..."
-                                        value={invoiceSearchQuery}
-                                        onChange={(e) => setInvoiceSearchQuery(e.target.value)}
-                                        className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs focus:ring-2 focus:ring-eva-blue outline-none text-slate-900 dark:text-white"
+                                        type="number"
+                                        placeholder="0.00"
+                                        min="0"
+                                        step="0.01"
+                                        value={amountPaid}
+                                        onChange={(e) => setAmountPaid(e.target.value)}
+                                        className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
                                     />
                                 </div>
                             )}
-                            
-                            {/* Invoice Selector */}
-                            <select
-                                required
-                                value={relatedInvoice}
-                                onChange={(e) => setRelatedInvoice(e.target.value)}
-                                className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-eva-blue outline-none text-slate-900 dark:text-white"
-                                size={pendingInvoices.length > 5 ? 6 : Math.max(2, pendingInvoices.length + 1)}
-                            >
-                                <option value="">Choose invoice to pay</option>
-                                {pendingInvoices.map(invoice => (
-                                    <option key={invoice.id} value={invoice.id}>
-                                        {invoice.invoice_number} - Due: ₹{parseFloat(invoice.balance_due).toFixed(2)} ({new Date(invoice.created_at).toLocaleDateString()})
-                                    </option>
-                                ))}
-                            </select>
-                            
-                            {allPendingInvoices.length === 0 ? (
-                                <p className="text-xs text-amber-600 dark:text-amber-400">
-                                    No pending credit invoices for this distributor
-                                </p>
-                            ) : (
-                                <p className="text-xs text-slate-500 dark:text-slate-400">
-                                    {pendingInvoices.length} of {allPendingInvoices.length} invoices shown
-                                </p>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Items Section - Only for Sales */}
-                    {transactionType === 'sale' && (
-                        <div className="bg-blue-50 dark:bg-blue-900/10 p-4 rounded-lg border border-blue-100 dark:border-blue-800">
-                            <div className="flex justify-between items-center mb-3">
-                                <h3 className="text-sm font-bold text-blue-800 dark:text-blue-400 flex items-center gap-2">
-                                    <span className="material-symbols-outlined">inventory_2</span>
-                                    Products
-                                </h3>
-                                <button
-                                    type="button"
-                                    onClick={handleAddItem}
-                                    className="text-xs font-bold text-eva-blue hover:underline flex items-center gap-1"
-                                >
-                                    <span className="material-symbols-outlined text-sm">add</span> Add Product
-                                </button>
-                            </div>
-
-                            <div className="space-y-3">
-                                {items.map((item) => {
-                                    const availableProducts = getAvailableProducts(item.product);
-                                    const selectedProduct = products.find(p => p.id.toString() === item.product);
-                                    const maxQty = selectedProduct ? parseFloat(selectedProduct.available_quantity) : 0;
-
-                                    return (
-                                        <div key={item.id} className="flex gap-2 items-start">
-                                            <div className="flex-1">
-                                                <select
-                                                    required
-                                                    value={item.product}
-                                                    onChange={(e) => handleItemChange(item.id, 'product', e.target.value)}
-                                                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-eva-blue outline-none text-slate-900 dark:text-white"
-                                                >
-                                                    <option value="">Select Product</option>
-                                                    {availableProducts.map(product => (
-                                                        <option key={product.id} value={product.id}>
-                                                            {product.name} (Avl: {product.available_quantity})
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                            <div className="w-28">
-                                                <input
-                                                    required
-                                                    type="number"
-                                                    placeholder="Qty"
-                                                    min="0.01"
-                                                    step="0.01"
-                                                    max={maxQty}
-                                                    value={item.quantity}
-                                                    onChange={(e) => {
-                                                        const value = e.target.value;
-                                                        if (value === '' || (parseFloat(value) >= 0 && parseFloat(value) <= maxQty)) {
-                                                            handleItemChange(item.id, 'quantity', value);
-                                                        }
-                                                    }}
-                                                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-eva-blue outline-none text-slate-900 dark:text-white"
-                                                />
-                                            </div>
-                                            <div className="w-28">
-                                                <input
-                                                    required
-                                                    type="number"
-                                                    placeholder="Price"
-                                                    min="0"
-                                                    step="0.01"
-                                                    value={item.unitPrice}
-                                                    onChange={(e) => {
-                                                        const value = e.target.value;
-                                                        if (value === '' || parseFloat(value) >= 0) {
-                                                            handleItemChange(item.id, 'unitPrice', value);
-                                                        }
-                                                    }}
-                                                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-eva-blue outline-none text-slate-900 dark:text-white"
-                                                />
-                                            </div>
-                                            {items.length > 1 && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleRemoveItem(item.id)}
-                                                    className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                                                >
-                                                    <span className="material-symbols-outlined text-lg">delete</span>
-                                                </button>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-
-                            <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-800 flex justify-between items-center">
-                                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Total Amount:</span>
-                                <span className="text-lg font-bold text-eva-blue">₹{getTotalAmount().toFixed(2)}</span>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Amount Paid - Only show for payment or credit type sale */}
-                    {(transactionType === 'payment' || (transactionType === 'sale' && paymentType === 'credit')) && (
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
-                                Amount Paid {transactionType === 'payment' ? '*' : '(Optional)'}
-                            </label>
-                            <input
-                                required={transactionType === 'payment'}
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={amountPaid}
-                                onChange={(e) => {
-                                    const value = e.target.value;
-                                    if (value === '' || parseFloat(value) >= 0) {
-                                        setAmountPaid(value);
-                                    }
-                                }}
-                                className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-eva-blue outline-none text-slate-900 dark:text-white"
-                                placeholder={transactionType === 'payment' ? 'Enter payment amount' : 'Enter partial payment (optional)'}
-                            />
-                            {transactionType === 'sale' && paymentType === 'credit' && (
-                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                    Leave empty for full credit, or enter partial payment
-                                </p>
-                            )}
-                            {transactionType === 'payment' && (
-                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                    Excess payment will be added to available balance
-                                </p>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Info for debit type sale */}
-                    {transactionType === 'sale' && paymentType === 'debit' && (
-                        <div className="bg-green-50 dark:bg-green-900/10 p-4 rounded-lg border border-green-200 dark:border-green-800">
-                            <div className="flex items-start gap-2">
-                                <span className="material-symbols-outlined text-green-600 dark:text-green-400 text-lg">info</span>
-                                <div>
-                                    <p className="text-sm font-semibold text-green-800 dark:text-green-400">Full Payment</p>
-                                    <p className="text-xs text-green-700 dark:text-green-500 mt-1">
-                                        Available credit will be used first, remaining amount will be paid in full
-                                    </p>
-                                    {selectedDistributor && parseFloat(selectedDistributor.balance) > 0 && (
-                                        <p className="text-xs text-green-700 dark:text-green-500 mt-1">
-                                            Available Credit: ₹{parseFloat(selectedDistributor.balance).toFixed(2)}
-                                        </p>
+                        </>
+                    ) : (
+                        <>
+                            <div>
+                                <div className="flex justify-between items-center mb-2">
+                                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Select Invoices to Pay</label>
+                                    {filteredPendingInvoices.length > 0 && (
+                                        <span className="text-xs text-slate-500">{selectedInvoices.length} selected</span>
                                     )}
                                 </div>
+                                
+                                {pendingInvoices && pendingInvoices.length > 0 && (
+                                    <input
+                                        type="text"
+                                        placeholder="Search invoices..."
+                                        value={invoiceSearch}
+                                        onChange={(e) => setInvoiceSearch(e.target.value)}
+                                        className="w-full px-3 py-2 mb-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
+                                    />
+                                )}
+
+                                <div className="border border-slate-300 dark:border-slate-600 rounded-lg max-h-48 overflow-y-auto">
+                                    {invoicesLoading ? (
+                                        <div className="p-4 text-center"><LoadingSpinner size="sm" /></div>
+                                    ) : filteredPendingInvoices.length === 0 ? (
+                                        <div className="p-4 text-center text-sm text-slate-500">
+                                            {invoiceSearch ? 'No matching invoices' : 'No pending credit invoices'}
+                                        </div>
+                                    ) : (
+                                        filteredPendingInvoices.map(invoice => (
+                                            <label
+                                                key={invoice.id}
+                                                className="flex items-center gap-3 p-3 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer border-b border-slate-200 dark:border-slate-700 last:border-0"
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedInvoices.includes(invoice.id)}
+                                                    onChange={() => handleInvoiceToggle(invoice.id)}
+                                                    className="rounded"
+                                                />
+                                                <div className="flex-1">
+                                                    <div className="flex justify-between">
+                                                        <span className="font-mono text-sm text-slate-900 dark:text-white">{invoice.invoice_number}</span>
+                                                        <span className="text-sm font-semibold text-red-600 dark:text-red-400">₹{invoice.balance_due} due</span>
+                                                    </div>
+                                                    <p className="text-xs text-slate-500">{new Date(invoice.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                                                </div>
+                                            </label>
+                                        ))
+                                    )}
+                                </div>
+
+                                {selectedInvoices.length > 0 && (
+                                    <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-200 dark:border-blue-800">
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-slate-700 dark:text-slate-300">Total Due:</span>
+                                            <span className="font-bold text-red-600 dark:text-red-400">₹{totalDue.toFixed(2)}</span>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
-                        </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Payment Amount</label>
+                                <input
+                                    required
+                                    type="number"
+                                    placeholder="0.00"
+                                    min="0.01"
+                                    step="0.01"
+                                    value={amountPaid}
+                                    onChange={(e) => setAmountPaid(e.target.value)}
+                                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
+                                />
+                                {amountPaid && selectedInvoices.length > 0 && (
+                                    <p className={`mt-2 text-xs ${paymentDifference >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                        {paymentDifference >= 0
+                                            ? `✓ Excess ₹${paymentDifference.toFixed(2)} will be added to credit balance`
+                                            : `⚠ Short by ₹${Math.abs(paymentDifference).toFixed(2)}`}
+                                    </p>
+                                )}
+                            </div>
+                        </>
                     )}
 
-                    {/* Notes */}
                     <div>
-                        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
-                            Notes (Optional)
-                        </label>
+                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Notes (Optional)</label>
                         <textarea
                             value={notes}
                             onChange={(e) => setNotes(e.target.value)}
                             rows="3"
-                            className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-eva-blue outline-none text-slate-900 dark:text-white resize-none"
-                            placeholder="Add any notes..."
+                            className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm resize-none"
                         />
                     </div>
 
@@ -386,13 +357,13 @@ const CreateInvoiceModal = ({ isOpen, onClose, onCreate, selectedDistributor }) 
                         <button
                             type="button"
                             onClick={onClose}
-                            className="px-4 py-2 text-sm font-semibold text-slate-700 bg-gray-100 rounded-lg hover:bg-gray-200 dark:bg-gray-800 dark:text-slate-300 dark:hover:bg-gray-700 transition-colors"
+                            className="px-4 py-2 text-sm font-semibold text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                         >
                             Cancel
                         </button>
                         <button
                             type="submit"
-                            className="px-4 py-2 text-sm font-bold text-white bg-eva-blue rounded-lg hover:bg-blue-800 transition-colors"
+                            className="px-4 py-2 text-sm font-bold text-white bg-eva-blue rounded-lg hover:bg-blue-800"
                         >
                             Create Invoice
                         </button>

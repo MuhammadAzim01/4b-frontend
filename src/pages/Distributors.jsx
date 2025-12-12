@@ -64,17 +64,21 @@ const Distributors = () => {
         onSuccessMessage: 'Invoice created successfully',
         onErrorMessage: 'Failed to create invoice',
         onSuccess: async () => {
-            await refetchInvoices();
+            // Refresh distributor list
             await refetchDistributors();
-            // Use callback to get fresh distributor state
-            setSelectedDistributor(prev => {
-                if (prev) {
-                    fetchWithAuth(`distributors/${prev.id}/`)
-                        .then(response => setSelectedDistributor(response))
-                        .catch(error => console.error('Failed to update distributor:', error));
+            
+            // Update selected distributor with fresh data before refetching invoices
+            if (selectedDistributor?.id) {
+                try {
+                    const updatedDistributor = await fetchWithAuth(`distributors/${selectedDistributor.id}/`);
+                    setSelectedDistributor(updatedDistributor);
+                    // Now refetch invoices after we've ensured selectedDistributor is updated
+                    await refetchInvoices();
+                } catch (error) {
+                    console.error('Failed to update distributor:', error);
                 }
-                return prev;
-            });
+            }
+            
             setIsInvoiceModalOpen(false);
         },
     });
@@ -91,6 +95,7 @@ const Distributors = () => {
     };
 
     const handleSelectDistributor = (distributor) => {
+        console.log('Selected distributor:', distributor);
         setSelectedDistributor(distributor);
         setInvoicePage(1);
     };
@@ -399,8 +404,8 @@ const Distributors = () => {
             <CreateInvoiceModal
                 isOpen={isInvoiceModalOpen}
                 onClose={() => setIsInvoiceModalOpen(false)}
-                onCreate={handleCreateInvoice}
-                selectedDistributor={selectedDistributor}
+                onSubmit={handleCreateInvoice}
+                distributor={selectedDistributor}
             />
 
             <InvoiceDetailsModal
