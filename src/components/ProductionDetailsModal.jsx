@@ -4,6 +4,7 @@ import { getAuthStatus } from '../utils/auth';
 
 const ProductionDetailsModal = ({ isOpen, onClose, run }) => {
     const wastage = run?.raw_materials?.filter(m => m.quantity_wasted > 0);
+    const returnedItems = run?.raw_materials?.filter(m => m.quantity_returned > 0);
     const { role } = getAuthStatus().user;
 
     if (!isOpen || !run) return null;
@@ -45,15 +46,15 @@ const ProductionDetailsModal = ({ isOpen, onClose, run }) => {
                             </div>
                         </div>
                         {role == 'admin' && (
-                        <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg border border-slate-100 dark:border-slate-700">
-                            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Cost Summary</h3>
-                            <div className="flex items-center justify-between">
-                                <span className="text-sm text-slate-600 dark:text-slate-400">Total Cost</span>
-                                <span className="text-2xl font-black text-blue-600 dark:text-blue-400">
-                                    ${parseFloat(run.total_cost || 0).toFixed(2)}
-                                </span>
+                            <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg border border-slate-100 dark:border-slate-700">
+                                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Cost Summary</h3>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm text-slate-600 dark:text-slate-400">Total Cost</span>
+                                    <span className="text-2xl font-black text-blue-600 dark:text-blue-400">
+                                        ${parseFloat(run.total_cost || 0).toFixed(2)}
+                                    </span>
+                                </div>
                             </div>
-                        </div>
                         )}
                     </div>
 
@@ -106,6 +107,39 @@ const ProductionDetailsModal = ({ isOpen, onClose, run }) => {
                         </div>
 
                         <div>
+                            {/* Returned Items Section */}
+                            <div className="mb-8">
+                                <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-4">
+                                    <span className="material-symbols-outlined text-blue-500">assignment_return</span>
+                                    Returned to Inventory
+                                </h3>
+                                {returnedItems && returnedItems.length > 0 ? (
+                                    <div className="bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-100 dark:border-blue-800/30 overflow-hidden">
+                                        <table className="w-full text-sm text-left">
+                                            <thead className="bg-blue-100/50 dark:bg-blue-900/20 text-xs text-blue-800 dark:text-blue-400 uppercase">
+                                                <tr>
+                                                    <th className="px-4 py-2">Material</th>
+                                                    <th className="px-4 py-2 text-right">Qty</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {returnedItems.map((r, idx) => (
+                                                    <tr key={idx} className="border-b last:border-0 border-blue-100 dark:border-blue-800/30">
+                                                        <td className="px-4 py-2 text-slate-900 dark:text-white">{r.raw_material_name}</td>
+                                                        <td className="px-4 py-2 text-right font-mono font-bold text-blue-600 dark:text-blue-400">{r.quantity_returned}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-lg border border-slate-100 dark:border-slate-700 text-center text-slate-400">
+                                        <span className="material-symbols-outlined mb-1">info</span>
+                                        <p className="text-sm">No returned items</p>
+                                    </div>
+                                )}
+                            </div>
+
                             <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-4">
                                 <span className="material-symbols-outlined text-red-500">delete_outline</span>
                                 Waste / Scrap

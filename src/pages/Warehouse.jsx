@@ -1,8 +1,25 @@
 import React, { useState } from 'react';
+import CreateProductModal from '../components/CreateProductModal';
+import { useCreateUpdateMutation } from '../hooks/useCreateUpdateMutation';
+import { fetchWithAuth } from '../utils/fetchApis';
 
 const Warehouse = () => {
     const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
     const [isLedgerModalOpen, setIsLedgerModalOpen] = useState(false);
+    const [isCreateProductModalOpen, setIsCreateProductModalOpen] = useState(false);
+
+    // Create product mutation
+    const createProductMutation = useCreateUpdateMutation({
+        url: 'production/products/',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        fetchFunction: fetchWithAuth,
+        onSuccessMessage: 'Product created successfully',
+        onErrorMessage: 'Failed to create product',
+        onSuccess: () => {
+            setIsCreateProductModalOpen(false);
+        },
+    });
 
     const handleNewEntryClick = () => {
         setIsEntryModalOpen(true);
@@ -17,6 +34,10 @@ const Warehouse = () => {
         alert('Production entry added successfully!');
     };
 
+    const handleCreateProduct = (productData) => {
+        createProductMutation.mutate(JSON.stringify(productData));
+    };
+
     return (
         <div className="flex-1 flex-col overflow-y-auto p-8">
             {/* PageHeading */}
@@ -26,6 +47,12 @@ const Warehouse = () => {
                     <p className="text-slate-500 dark:text-gray-400 text-base font-normal leading-normal">Real-time inventory levels and immutable transaction ledger.</p>
                 </div>
                 <div className="flex gap-2">
+                    <button
+                        onClick={() => setIsCreateProductModalOpen(true)}
+                        className="flex h-10 items-center justify-center gap-x-2 rounded-lg border border-slate-300 dark:border-gray-700 bg-white dark:bg-background-dark px-4 hover:bg-slate-50 dark:hover:bg-gray-800 transition-colors">
+                        <span className="material-symbols-outlined text-base">add_box</span>
+                        <p className="text-sm font-medium">New Product</p>
+                    </button>
                     <button
                         className="flex h-10 items-center justify-center gap-x-2 rounded-lg border border-slate-300 dark:border-gray-700 bg-white dark:bg-background-dark px-4 hover:bg-slate-50 dark:hover:bg-gray-800 transition-colors">
                         <span className="material-symbols-outlined text-base">download</span>
@@ -353,6 +380,12 @@ const Warehouse = () => {
                     </div>
                 </div>
             )}
+
+            <CreateProductModal
+                isOpen={isCreateProductModalOpen}
+                onClose={() => setIsCreateProductModalOpen(false)}
+                onCreate={handleCreateProduct}
+            />
         </div>
     );
 };
