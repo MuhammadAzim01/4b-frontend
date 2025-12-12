@@ -69,18 +69,22 @@ const Production = () => {
                 raw_material: parseInt(w.materialId),
                 quantity_wasted: parseFloat(w.quantity)
             })),
+            returned: resultData.returns.map(r => ({
+                raw_material: parseInt(r.materialId),
+                quantity_returned: parseFloat(r.quantity)
+            })),
             notes: resultData.notes || ''
         };
 
         const loadingToast = toast.loading('Completing production...');
-        
+
         try {
             await fetchWithAuth(`production/batches/${currentRun.id}/end/`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
-            
+
             toast.dismiss(loadingToast);
             toast.success('Production completed successfully');
             refetch();

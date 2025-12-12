@@ -176,15 +176,13 @@ const Distributors = () => {
                                         <tr
                                             key={distributor.id}
                                             onClick={() => handleSelectDistributor(distributor)}
-                                            className={`border-b border-slate-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-colors ${
-                                                selectedDistributor?.id === distributor.id ? 'bg-eva-blue/10 dark:bg-eva-blue/20' : ''
-                                            }`}
+                                            className={`border-b border-slate-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-colors ${selectedDistributor?.id === distributor.id ? 'bg-eva-blue/10 dark:bg-eva-blue/20' : ''
+                                                }`}
                                         >
                                             <td className="px-4 py-3 text-slate-900 dark:text-gray-200 text-sm font-medium">{distributor.name}</td>
                                             <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-sm">{distributor.area}</td>
-                                            <td className={`px-4 py-3 text-right text-sm font-mono ${
-                                                parseFloat(distributor.balance) < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'
-                                            }`}>
+                                            <td className={`px-4 py-3 text-right text-sm font-mono ${parseFloat(distributor.balance) < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'
+                                                }`}>
                                                 ₹{parseFloat(distributor.balance).toFixed(2)}
                                             </td>
                                         </tr>
@@ -211,9 +209,8 @@ const Distributors = () => {
                                     <div>
                                         <div className="flex items-center gap-3 mb-2">
                                             <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{selectedDistributor.name}</h2>
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                                selectedDistributor.is_active ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' : 'bg-red-100 text-red-800'
-                                            }`}>
+                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${selectedDistributor.is_active ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' : 'bg-red-100 text-red-800'
+                                                }`}>
                                                 {selectedDistributor.is_active ? 'Active' : 'Inactive'}
                                             </span>
                                         </div>
@@ -240,9 +237,8 @@ const Distributors = () => {
                                     </div>
                                     <div className="text-right">
                                         <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Current Balance</p>
-                                        <p className={`text-3xl font-bold ${
-                                            parseFloat(selectedDistributor.balance) < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'
-                                        }`}>
+                                        <p className={`text-3xl font-bold ${parseFloat(selectedDistributor.balance) < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'
+                                            }`}>
                                             ₹{Math.abs(parseFloat(selectedDistributor.balance)).toFixed(2)}
                                         </p>
                                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -267,31 +263,28 @@ const Distributors = () => {
                                     <div className="flex gap-4 px-6">
                                         <button
                                             onClick={() => handleTabChange('history')}
-                                            className={`py-4 px-2 text-sm font-semibold border-b-2 transition-colors ${
-                                                activeTab === 'history'
+                                            className={`py-4 px-2 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'history'
                                                     ? 'border-eva-blue text-eva-blue'
                                                     : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
-                                            }`}
+                                                }`}
                                         >
                                             All Transactions
                                         </button>
                                         <button
                                             onClick={() => handleTabChange('sales')}
-                                            className={`py-4 px-2 text-sm font-semibold border-b-2 transition-colors ${
-                                                activeTab === 'sales'
+                                            className={`py-4 px-2 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'sales'
                                                     ? 'border-eva-blue text-eva-blue'
                                                     : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
-                                            }`}
+                                                }`}
                                         >
                                             Sales
                                         </button>
                                         <button
                                             onClick={() => handleTabChange('payments')}
-                                            className={`py-4 px-2 text-sm font-semibold border-b-2 transition-colors ${
-                                                activeTab === 'payments'
+                                            className={`py-4 px-2 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'payments'
                                                     ? 'border-eva-blue text-eva-blue'
                                                     : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
-                                            }`}
+                                                }`}
                                         >
                                             Payments
                                         </button>
@@ -340,11 +333,10 @@ const Distributors = () => {
                                                                 </td>
                                                                 <td className="px-4 py-3 text-slate-500 dark:text-gray-400">{new Date(invoice.created_at).toLocaleDateString()}</td>
                                                                 <td className="px-4 py-3">
-                                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                                                        invoice.transaction_type === 'sale' 
-                                                                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300' 
+                                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${invoice.transaction_type === 'sale'
+                                                                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300'
                                                                             : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
-                                                                    }`}>
+                                                                        }`}>
                                                                         {invoice.transaction_type === 'sale' ? 'Sale' : 'Payment'} - {invoice.payment_type}
                                                                     </span>
                                                                 </td>

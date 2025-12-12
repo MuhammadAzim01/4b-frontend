@@ -8,6 +8,7 @@ const EndProductionModal = ({ isOpen, onClose, onEnd, runData }) => {
     const [outputQuantity, setOutputQuantity] = useState('');
     const [notes, setNotes] = useState('');
     const [wasteItems, setWasteItems] = useState([]);
+    const [returnedItems, setReturnedItems] = useState([]);
 
     // Fetch products (finished goods)
     const { data } = useFetchQuery({
@@ -27,19 +28,27 @@ const EndProductionModal = ({ isOpen, onClose, onEnd, runData }) => {
         setWasteItems(wasteItems.filter(m => m.id !== id));
     };
 
-    // Get max waste quantity for a material (cannot exceed quantity_used)
-    const getMaxWasteQuantity = (materialId) => {
+    const handleAddReturned = () => {
+        setReturnedItems([...returnedItems, { id: Date.now(), materialId: '', quantity: '' }]);
+    };
+
+    const handleRemoveReturned = (id) => {
+        setReturnedItems(returnedItems.filter(m => m.id !== id));
+    };
+
+    // Get max waste/return quantity for a material (cannot exceed quantity_used)
+    const getMaxQuantity = (materialId) => {
         const material = runData?.raw_materials?.find(m => m.raw_material.toString() === materialId);
         return material ? parseFloat(material.quantity_used) : 0;
     };
 
     const handleWasteChange = (id, field, value) => {
         if (field === 'quantity') {
-            const wasteItem = wasteItems.find(w => w.id === id);
-            if (wasteItem && wasteItem.materialId) {
-                const maxWaste = getMaxWasteQuantity(wasteItem.materialId);
-            
-                if (value !== '' && (parseFloat(value) < 0 || parseFloat(value) > maxWaste)) {
+            const item = wasteItems.find(w => w.id === id);
+            if (item && item.materialId) {
+                const maxQty = getMaxQuantity(item.materialId);
+
+                if (value !== '' && (parseFloat(value) < 0 || parseFloat(value) > maxQty)) {
                     return;
                 }
             } else if (value !== '' && parseFloat(value) < 0) {
@@ -49,6 +58,22 @@ const EndProductionModal = ({ isOpen, onClose, onEnd, runData }) => {
         setWasteItems(wasteItems.map(m => m.id === id ? { ...m, [field]: value } : m));
     };
 
+    const handleReturnedChange = (id, field, value) => {
+        if (field === 'quantity') {
+            const item = returnedItems.find(r => r.id === id);
+            if (item && item.materialId) {
+                const maxQty = getMaxQuantity(item.materialId);
+
+                if (value !== '' && (parseFloat(value) < 0 || parseFloat(value) > maxQty)) {
+                    return;
+                }
+            } else if (value !== '' && parseFloat(value) < 0) {
+                return;
+            }
+        }
+        setReturnedItems(returnedItems.map(m => m.id === id ? { ...m, [field]: value } : m));
+    };
+
     const handleMaxWaste = (id, materialId) => {
         const material = runData?.raw_materials?.find(m => m.raw_material.toString() === materialId);
         if (material) {
@@ -56,10 +81,25 @@ const EndProductionModal = ({ isOpen, onClose, onEnd, runData }) => {
         }
     };
 
+    const handleMaxReturned = (id, materialId) => {
+        const material = runData?.raw_materials?.find(m => m.raw_material.toString() === materialId);
+        if (material) {
+            handleReturnedChange(id, 'quantity', material.quantity_used);
+        }
+    };
+
     // Get available materials for waste (not already selected)
     const getAvailableWasteMaterials = (currentMaterialId) => {
         const selectedIds = wasteItems.map(w => w.materialId).filter(id => id !== currentMaterialId);
-        return runData?.raw_materials?.filter(item => 
+        return runData?.raw_materials?.filter(item =>
+            !selectedIds.includes(item.raw_material.toString())
+        ) || [];
+    };
+
+    // Get available materials for returns (not already selected)
+    const getAvailableReturnedMaterials = (currentMaterialId) => {
+        const selectedIds = returnedItems.map(r => r.materialId).filter(id => id !== currentMaterialId);
+        return runData?.raw_materials?.filter(item =>
             !selectedIds.includes(item.raw_material.toString())
         ) || [];
     };
@@ -79,9 +119,20 @@ const EndProductionModal = ({ isOpen, onClose, onEnd, runData }) => {
             .filter(w => w.materialId && w.quantity)
             .map(w => {
                 const material = runData?.raw_materials?.find(m => m.raw_material.toString() === w.materialId);
-                return { 
-                    materialId: w.materialId, 
+                return {
+                    materialId: w.materialId,
                     quantity: w.quantity,
+                    name: material ? material.raw_material_name : 'Unknown'
+                };
+            });
+
+        const returnedSummary = returnedItems
+            .filter(r => r.materialId && r.quantity)
+            .map(r => {
+                const material = runData?.raw_materials?.find(m => m.raw_material.toString() === r.materialId);
+                return {
+                    materialId: r.materialId,
+                    quantity: r.quantity,
                     name: material ? material.raw_material_name : 'Unknown'
                 };
             });
@@ -90,6 +141,7 @@ const EndProductionModal = ({ isOpen, onClose, onEnd, runData }) => {
             productId,
             outputQuantity,
             waste: wasteSummary,
+            returns: returnedSummary,
             notes
         });
     };
@@ -147,6 +199,78 @@ const EndProductionModal = ({ isOpen, onClose, onEnd, runData }) => {
                         </div>
                     </div>
 
+                    {/* Returned Items Section */}
+                    <div className="bg-blue-50 dark:bg-blue-900/10 p-4 rounded-lg border border-blue-100 dark:border-blue-800">
+                        <div className="flex justify-between items-center mb-3">
+                            <h3 className="text-sm font-bold text-blue-800 dark:text-blue-400 flex items-center gap-2">
+                                <span className="material-symbols-outlined">assignment_return</span>
+                                Returned to Inventory
+                            </h3>
+                            <button
+                                type="button"
+                                onClick={handleAddReturned}
+                                className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"
+                            >
+                                <span className="material-symbols-outlined text-sm">add</span> Add Returned Item
+                            </button>
+                        </div>
+
+                        <div className="space-y-3">
+                            {returnedItems.map((field) => {
+                                const availableMaterials = getAvailableReturnedMaterials(field.materialId);
+                                const maxQty = getMaxQuantity(field.materialId);
+
+                                return (
+                                    <div key={field.id} className="flex gap-2 items-start">
+                                        <div className="flex-1">
+                                            <select
+                                                value={field.materialId}
+                                                onChange={(e) => handleReturnedChange(field.id, 'materialId', e.target.value)}
+                                                className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-white"
+                                            >
+                                                <option value="">Select Material</option>
+                                                {availableMaterials.map(item => (
+                                                    <option key={item.raw_material} value={item.raw_material}>
+                                                        {item.raw_material_name} (Used: {item.quantity_used})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="w-32">
+                                            <input
+                                                type="number"
+                                                placeholder="Qty"
+                                                min="0"
+                                                step="1"
+                                                max={maxQty}
+                                                value={field.quantity}
+                                                onChange={(e) => handleReturnedChange(field.id, 'quantity', e.target.value)}
+                                                className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-white"
+                                            />
+                                        </div>
+                                        {field.materialId && (
+                                            <button
+                                                type="button"
+                                                onClick={() => handleMaxReturned(field.id, field.materialId)}
+                                                className="px-3 py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors border border-blue-600"
+                                                title="Return all unused quantity"
+                                            >
+                                                MAX
+                                            </button>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => handleRemoveReturned(field.id)}
+                                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                        >
+                                            <span className="material-symbols-outlined text-lg">close</span>
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
                     {/* Waste Section */}
                     <div className="bg-red-50 dark:bg-red-900/10 p-4 rounded-lg border border-red-100 dark:border-red-800">
                         <div className="flex justify-between items-center mb-3">
@@ -166,8 +290,8 @@ const EndProductionModal = ({ isOpen, onClose, onEnd, runData }) => {
                         <div className="space-y-3">
                             {wasteItems.map((field) => {
                                 const availableMaterials = getAvailableWasteMaterials(field.materialId);
-                                const maxWaste = getMaxWasteQuantity(field.materialId);
-                                
+                                const maxWaste = getMaxQuantity(field.materialId);
+
                                 return (
                                     <div key={field.id} className="flex gap-2 items-start">
                                         <div className="flex-1">
