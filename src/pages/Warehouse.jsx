@@ -1,12 +1,59 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import CreateProductModal from '../components/CreateProductModal';
 import { useCreateUpdateMutation } from '../hooks/useCreateUpdateMutation';
+import { useFetchQuery } from '../hooks/useFetchQuery';
 import { fetchWithAuth } from '../utils/fetchApis';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 const Warehouse = () => {
-    const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
     const [isLedgerModalOpen, setIsLedgerModalOpen] = useState(false);
     const [isCreateProductModalOpen, setIsCreateProductModalOpen] = useState(false);
+    const [selectedProduct, setSelectedProduct] = useState(null);
+
+    // Pagination & Search
+    const [page, setPage] = useState(1);
+    const [pageSize] = useState(10);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+
+    // Date Filters
+    const [filterType, setFilterType] = useState('month'); // 'week', 'month', 'custom', 'as_of'
+    const [customStartDate, setCustomStartDate] = useState('');
+    const [customEndDate, setCustomEndDate] = useState('');
+    const [asOfDate, setAsOfDate] = useState('');
+
+    // Debounce Search
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(searchQuery);
+            setPage(1);
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [searchQuery]);
+
+    // Construct Query Params
+    const getQueryParams = () => {
+        let params = `?page=${page}&page_size=${pageSize}&search=${debouncedSearch}`;
+
+        if (filterType === 'as_of') {
+            if (asOfDate) params += `&date=${asOfDate}`;
+        } else {
+            params += `&date_range=${filterType}`;
+            if (filterType === 'custom') {
+                if (customStartDate) params += `&start_date=${customStartDate}`;
+                if (customEndDate) params += `&end_date=${customEndDate}`;
+            }
+        }
+        return params;
+    };
+
+    // Fetch Products
+    const { data: productsData, isFetching: isProductsLoading, refetch: refetchProducts } = useFetchQuery({
+        url: `production/products/${getQueryParams()}`,
+        queryKey: ['products', page, debouncedSearch, filterType, customStartDate, customEndDate, asOfDate],
+        fetchFunction: fetchWithAuth,
+        keepPreviousData: true,
+    });
 
     // Create product mutation
     const createProductMutation = useCreateUpdateMutation({
@@ -18,28 +65,51 @@ const Warehouse = () => {
         onErrorMessage: 'Failed to create product',
         onSuccess: () => {
             setIsCreateProductModalOpen(false);
+            refetchProducts();
         },
     });
 
-    const handleNewEntryClick = () => {
-        setIsEntryModalOpen(true);
+    // Fetch Ledger for selected product
+    // Ledger shares the same date filters or can be overridden. 
+    // Usually ledger needs the same context as the summary card.
+    const getLedgerQueryParams = () => {
+        if (!selectedProduct) return null;
+        let params = `inventory/transactions/?item=${selectedProduct.id}`;
+
+        if (filterType === 'as_of') {
+            // For ledger, 'as_of' might mean 'transactions up to this date'
+            if (asOfDate) params += `&end_date=${asOfDate}`;
+        } else {
+            params += `&date_range=${filterType}`;
+            if (filterType === 'custom') {
+                if (customStartDate) params += `&start_date=${customStartDate}`;
+                if (customEndDate) params += `&end_date=${customEndDate}`;
+            }
+        }
+        return params;
     };
 
-    const handleViewLedgerClick = () => {
+    const { data: ledgerData, isFetching: isLedgerLoading } = useFetchQuery({
+        url: getLedgerQueryParams(),
+        queryKey: ['product_ledger', selectedProduct?.id, filterType, customStartDate, customEndDate, asOfDate],
+        fetchFunction: fetchWithAuth,
+        enabled: !!selectedProduct,
+    });
+
+    const handleViewLedgerClick = (product) => {
+        setSelectedProduct(product);
         setIsLedgerModalOpen(true);
-    };
-
-    const handleConfirmEntry = () => {
-        setIsEntryModalOpen(false);
-        alert('Production entry added successfully!');
     };
 
     const handleCreateProduct = (productData) => {
         createProductMutation.mutate(JSON.stringify(productData));
     };
 
+    const products = productsData?.results || [];
+    const totalPages = Math.ceil((productsData?.count || 0) / pageSize);
+
     return (
-        <div className="flex-1 flex-col overflow-y-auto p-8">
+        <div className="flex-1 flex-col overflow-y-auto p-8 bg-slate-50 dark:bg-background">
             {/* PageHeading */}
             <div className="flex flex-wrap justify-between gap-4 items-center mb-6">
                 <div className="flex min-w-72 flex-col gap-2">
@@ -53,329 +123,232 @@ const Warehouse = () => {
                         <span className="material-symbols-outlined text-base">add_box</span>
                         <p className="text-sm font-medium">New Product</p>
                     </button>
-                    <button
-                        className="flex h-10 items-center justify-center gap-x-2 rounded-lg border border-slate-300 dark:border-gray-700 bg-white dark:bg-background-dark px-4 hover:bg-slate-50 dark:hover:bg-gray-800 transition-colors">
-                        <span className="material-symbols-outlined text-base">download</span>
-                        <p className="text-sm font-medium">Export</p>
-                    </button>
-                    <button
-                        onClick={handleNewEntryClick}
-                        className="flex h-10 items-center justify-center gap-x-2 rounded-lg bg-primary text-white px-4 hover:bg-primary/90 transition-colors">
-                        <span className="material-symbols-outlined text-base">add</span>
-                        <p className="text-sm font-medium">New Entry</p>
-                    </button>
                 </div>
             </div>
 
-            {/* Chips / Global Filters */}
-            <div className="flex gap-2 pb-6 border-b border-slate-200 dark:border-gray-800">
-                <button
-                    className="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-white dark:bg-gray-800 border border-slate-300 dark:border-gray-700 pl-4 pr-3 hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
-                    <p className="text-slate-900 dark:text-white text-sm font-medium leading-normal">Last 7 Days</p>
-                    <span className="material-symbols-outlined text-lg">expand_more</span>
-                </button>
-                <button
-                    className="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-primary/10 text-primary border border-primary/20 pl-4 pr-3">
-                    <p className="text-sm font-semibold leading-normal">This Month</p>
-                    <span className="material-symbols-outlined text-lg">expand_more</span>
-                </button>
-                <button
-                    className="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-white dark:bg-gray-800 border border-slate-300 dark:border-gray-700 pl-4 pr-3 hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
-                    <p className="text-slate-900 dark:text-white text-sm font-medium leading-normal">Last 90 Days</p>
-                    <span className="material-symbols-outlined text-lg">expand_more</span>
-                </button>
-                <button
-                    className="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-white dark:bg-gray-800 border border-slate-300 dark:border-gray-700 pl-4 pr-3 hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors">
-                    <p className="text-slate-900 dark:text-white text-sm font-medium leading-normal">Custom Range</p>
-                    <span className="material-symbols-outlined text-lg">calendar_today</span>
-                </button>
-            </div>
+            {/* Filters / Toolbar */}
+            <div className="flex flex-col gap-4 pb-6 border-b border-slate-200 dark:border-gray-800">
+                <div className="flex flex-wrap items-center gap-4">
+                    {/* Search */}
+                    <div className="relative">
+                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">search</span>
+                        <input
+                            type="text"
+                            placeholder="Search products..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-10 pr-4 py-2 h-9 rounded-lg border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:ring-2 focus:ring-eva-blue outline-none w-64"
+                        />
+                    </div>
 
-            {/* SKU Columns */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-                {/* SKU Card 1: Water Pats - 500ml */}
-                <div className="flex flex-col gap-4 rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-background-dark p-6">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <h2 className="text-slate-900 dark:text-white text-lg font-bold leading-tight">Water Pats - 500ml</h2>
-                            <p className="text-sm text-slate-500 dark:text-gray-400">SKU: WP-500ML</p>
-                        </div>
-                        <button onClick={handleViewLedgerClick} className="text-primary font-medium text-sm flex items-center gap-1 hover:underline">
-                            View Ledger
-                            <span className="material-symbols-outlined text-base">arrow_forward</span>
-                        </button>
-                    </div>
-                    <div className="flex flex-col gap-2 rounded-lg p-5 bg-slate-50 dark:bg-gray-900/50 border border-slate-200 dark:border-gray-800">
-                        <p className="text-slate-500 dark:text-gray-400 text-sm font-medium">Total Stock on Hand</p>
-                        <p className="text-slate-900 dark:text-white text-3xl font-bold">8,450 <span className="text-xl font-medium text-slate-500">Units</span></p>
-                        <p className="text-[#198754] text-sm font-medium">+2,100 Units this week</p>
-                    </div>
-                    <div className="flex flex-col">
-                        <h3 className="text-base font-semibold mb-3 text-slate-900 dark:text-white">Recent Transactions</h3>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm text-left">
-                                <thead className="text-xs text-slate-500 dark:text-gray-400 uppercase bg-slate-50 dark:bg-gray-800">
-                                    <tr>
-                                        <th className="px-4 py-3" scope="col">Transaction</th>
-                                        <th className="px-4 py-3" scope="col">Source</th>
-                                        <th className="px-4 py-3 text-right" scope="col">Quantity</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr className="border-b dark:border-gray-800">
-                                        <td className="px-4 py-3">
-                                            <div className="font-medium text-slate-900 dark:text-white">#TXN789B1</div>
-                                            <div className="text-xs text-slate-500 dark:text-gray-400">Apr 15, 2024</div>
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-600 dark:text-gray-300">Production</td>
-                                        <td className="px-4 py-3 font-medium text-right text-[#198754]">+ 5,000</td>
-                                    </tr>
-                                    <tr className="border-b dark:border-gray-800">
-                                        <td className="px-4 py-3">
-                                            <div className="font-medium text-slate-900 dark:text-white">#TXN789B0</div>
-                                            <div className="text-xs text-slate-500 dark:text-gray-400">Apr 14, 2024</div>
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-600 dark:text-gray-300">Distributor</td>
-                                        <td className="px-4 py-3 font-medium text-right text-[#DC3545]">- 1,250</td>
-                                    </tr>
-                                    <tr className="border-b dark:border-gray-800">
-                                        <td className="px-4 py-3">
-                                            <div className="font-medium text-slate-900 dark:text-white">#TXN789A9</div>
-                                            <div className="text-xs text-slate-500 dark:text-gray-400">Apr 13, 2024</div>
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-600 dark:text-gray-300">Distributor</td>
-                                        <td className="px-4 py-3 font-medium text-right text-[#DC3545]">- 850</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                {/* SKU Card 2: Water Pats - 1.5 Litre */}
-                <div className="flex flex-col gap-4 rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-background-dark p-6">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <h2 className="text-slate-900 dark:text-white text-lg font-bold leading-tight">Water Pats - 1.5 Litre</h2>
-                            <p className="text-sm text-slate-500 dark:text-gray-400">SKU: WP-1500ML</p>
-                        </div>
-                        <button onClick={handleViewLedgerClick} className="text-primary font-medium text-sm flex items-center gap-1 hover:underline">
-                            View Ledger
-                            <span className="material-symbols-outlined text-base">arrow_forward</span>
-                        </button>
-                    </div>
-                    <div className="flex flex-col gap-2 rounded-lg p-5 bg-slate-50 dark:bg-gray-900/50 border border-slate-200 dark:border-gray-800">
-                        <p className="text-slate-500 dark:text-gray-400 text-sm font-medium">Total Stock on Hand</p>
-                        <p className="text-slate-900 dark:text-white text-3xl font-bold">4,210 <span className="text-xl font-medium text-slate-500">Units</span></p>
-                        <p className="text-[#198754] text-sm font-medium">+1,500 Units this week</p>
-                    </div>
-                    <div className="flex flex-col">
-                        <h3 className="text-base font-semibold mb-3 text-slate-900 dark:text-white">Recent Transactions</h3>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm text-left">
-                                <thead className="text-xs text-slate-500 dark:text-gray-400 uppercase bg-slate-50 dark:bg-gray-800">
-                                    <tr>
-                                        <th className="px-4 py-3" scope="col">Transaction</th>
-                                        <th className="px-4 py-3" scope="col">Source</th>
-                                        <th className="px-4 py-3 text-right" scope="col">Quantity</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr className="border-b dark:border-gray-800">
-                                        <td className="px-4 py-3">
-                                            <div className="font-medium text-slate-900 dark:text-white">#TXN654C2</div>
-                                            <div className="text-xs text-slate-500 dark:text-gray-400">Apr 15, 2024</div>
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-600 dark:text-gray-300">Production</td>
-                                        <td className="px-4 py-3 font-medium text-right text-[#198754]">+ 2,000</td>
-                                    </tr>
-                                    <tr className="border-b dark:border-gray-800">
-                                        <td className="px-4 py-3">
-                                            <div className="font-medium text-slate-900 dark:text-white">#TXN654C1</div>
-                                            <div className="text-xs text-slate-500 dark:text-gray-400">Apr 14, 2024</div>
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-600 dark:text-gray-300">Distributor</td>
-                                        <td className="px-4 py-3 font-medium text-right text-[#DC3545]">- 500</td>
-                                    </tr>
-                                    <tr className="border-b dark:border-gray-800">
-                                        <td className="px-4 py-3">
-                                            <div className="font-medium text-slate-900 dark:text-white">#TXN654C0</div>
-                                            <div className="text-xs text-slate-500 dark:text-gray-400">Apr 12, 2024</div>
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-600 dark:text-gray-300">Production</td>
-                                        <td className="px-4 py-3 font-medium text-right text-[#198754]">+ 1,500</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                {/* SKU Card 3: 19 Litre Bottles */}
-                <div className="flex flex-col gap-4 rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-background-dark p-6">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <h2 className="text-slate-900 dark:text-white text-lg font-bold leading-tight">19 Litre Bottles</h2>
-                            <p className="text-sm text-slate-500 dark:text-gray-400">SKU: WB-19L</p>
-                        </div>
-                        <button onClick={handleViewLedgerClick} className="text-primary font-medium text-sm flex items-center gap-1 hover:underline">
-                            View Ledger
-                            <span className="material-symbols-outlined text-base">arrow_forward</span>
-                        </button>
-                    </div>
-                    <div className="flex flex-col gap-2 rounded-lg p-5 bg-slate-50 dark:bg-gray-900/50 border border-slate-200 dark:border-gray-800">
-                        <p className="text-slate-500 dark:text-gray-400 text-sm font-medium">Total Stock on Hand</p>
-                        <p className="text-slate-900 dark:text-white text-3xl font-bold">1,150 <span className="text-xl font-medium text-slate-500">Units</span></p>
-                        <p className="text-[#DC3545] text-sm font-medium">-250 Units this week</p>
-                    </div>
-                    <div className="flex flex-col">
-                        <h3 className="text-base font-semibold mb-3 text-slate-900 dark:text-white">Recent Transactions</h3>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm text-left">
-                                <thead className="text-xs text-slate-500 dark:text-gray-400 uppercase bg-slate-50 dark:bg-gray-800">
-                                    <tr>
-                                        <th className="px-4 py-3" scope="col">Transaction</th>
-                                        <th className="px-4 py-3" scope="col">Source</th>
-                                        <th className="px-4 py-3 text-right" scope="col">Quantity</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr className="border-b dark:border-gray-800">
-                                        <td className="px-4 py-3">
-                                            <div className="font-medium text-slate-900 dark:text-white">#TXN432D5</div>
-                                            <div className="text-xs text-slate-500 dark:text-gray-400">Apr 15, 2024</div>
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-600 dark:text-gray-300">Distributor</td>
-                                        <td className="px-4 py-3 font-medium text-right text-[#DC3545]">- 400</td>
-                                    </tr>
-                                    <tr className="border-b dark:border-gray-800">
-                                        <td className="px-4 py-3">
-                                            <div className="font-medium text-slate-900 dark:text-white">#TXN432D4</div>
-                                            <div className="text-xs text-slate-500 dark:text-gray-400">Apr 13, 2024</div>
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-600 dark:text-gray-300">Production</td>
-                                        <td className="px-4 py-3 font-medium text-right text-[#198754]">+ 500</td>
-                                    </tr>
-                                    <tr className="border-b dark:border-gray-800">
-                                        <td className="px-4 py-3">
-                                            <div className="font-medium text-slate-900 dark:text-white">#TXN432D3</div>
-                                            <div className="text-xs text-slate-500 dark:text-gray-400">Apr 11, 2024</div>
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-600 dark:text-gray-300">Distributor</td>
-                                        <td className="px-4 py-3 font-medium text-right text-[#DC3545]">- 350</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* New Entry Modal */}
-            {isEntryModalOpen && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-800">
-                        <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
-                            <h3 className="text-xl font-bold text-slate-900 dark:text-white">New Production Entry</h3>
-                            <button onClick={() => setIsEntryModalOpen(false)} className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
-                                <span className="material-symbols-outlined">close</span>
+                    {/* Filter Presets */}
+                    <div className="flex bg-white dark:bg-gray-800 rounded-lg border border-slate-300 dark:border-gray-700 p-1">
+                        {[
+                            { id: 'week', label: 'Last 7 Days' },
+                            { id: 'month', label: 'This Month' },
+                            { id: 'custom', label: 'Custom Range' },
+                            { id: 'as_of', label: 'Stock As Of' }
+                        ].map((filter) => (
+                            <button
+                                key={filter.id}
+                                onClick={() => setFilterType(filter.id)}
+                                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${filterType === filter.id
+                                        ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                                    }`}
+                            >
+                                {filter.label}
                             </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Conditional Inputs based on Filter Type */}
+                {filterType === 'custom' && (
+                    <div className="flex items-center gap-2 animate-in slide-in-from-top-2 fade-in duration-200">
+                        <div className="flex items-center gap-2">
+                            <label className="text-sm text-slate-500">From:</label>
+                            <input
+                                type="date"
+                                value={customStartDate}
+                                onChange={(e) => setCustomStartDate(e.target.value)}
+                                className="h-9 px-3 rounded-lg border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm outline-none focus:border-eva-blue"
+                            />
                         </div>
-                        <div className="p-6 space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Product</label>
-                                <select className="w-full rounded-lg border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-primary focus:border-primary">
-                                    <option>Water Pats - 500ml</option>
-                                    <option>Water Pats - 1.5 Litre</option>
-                                    <option>19 Litre Bottles</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Batch Number</label>
-                                <input type="text" className="w-full rounded-lg border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-primary focus:border-primary" placeholder="e.g., BATCH-2023-001" />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Quantity Produced</label>
-                                    <input type="number" className="w-full rounded-lg border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-primary focus:border-primary" placeholder="0" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Date</label>
-                                    <input type="date" className="w-full rounded-lg border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-primary focus:border-primary" />
-                                </div>
-                            </div>
-                        </div>
-                        <div className="p-6 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-3">
-                            <button onClick={() => setIsEntryModalOpen(false)} className="px-4 py-2 rounded-lg text-sm font-semibold bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200">Cancel</button>
-                            <button onClick={handleConfirmEntry} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary hover:bg-primary/90 text-white">Add Entry</button>
+                        <div className="flex items-center gap-2">
+                            <label className="text-sm text-slate-500">To:</label>
+                            <input
+                                type="date"
+                                value={customEndDate}
+                                onChange={(e) => setCustomEndDate(e.target.value)}
+                                className="h-9 px-3 rounded-lg border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm outline-none focus:border-eva-blue"
+                            />
                         </div>
                     </div>
+                )}
+
+                {filterType === 'as_of' && (
+                    <div className="flex items-center gap-2 animate-in slide-in-from-top-2 fade-in duration-200">
+                        <label className="text-sm text-slate-500">View Stock As Of:</label>
+                        <input
+                            type="date"
+                            value={asOfDate}
+                            onChange={(e) => setAsOfDate(e.target.value)}
+                            className="h-9 px-3 rounded-lg border border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm outline-none focus:border-eva-blue"
+                            max={new Date().toISOString().split('T')[0]}
+                        />
+                    </div>
+                )}
+            </div>
+
+            {/* Product Cards */}
+            {isProductsLoading && !products.length ? (
+                <div className="flex justify-center items-center h-64">
+                    <LoadingSpinner />
+                </div>
+            ) : products.length === 0 ? (
+                <div className="text-center py-12 text-slate-500">
+                    <span className="material-symbols-outlined text-4xl mb-2 opacity-50">inventory_2</span>
+                    <p>No products found matching your criteria.</p>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+                    {products.map((product) => (
+                        <div key={product.id} className="flex flex-col gap-4 rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-background-dark p-6 shadow-sm hover:shadow-md transition-shadow">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h2 className="text-slate-900 dark:text-white text-lg font-bold leading-tight">{product.name}</h2>
+                                    <p className="text-sm text-slate-500 dark:text-gray-400">SKU: {product.sku || 'N/A'}</p>
+                                </div>
+                                <button
+                                    onClick={() => handleViewLedgerClick(product)}
+                                    className="text-primary font-medium text-sm flex items-center gap-1 hover:underline group"
+                                >
+                                    View Ledger
+                                    <span className="material-symbols-outlined text-base group-hover:translate-x-1 transition-transform">arrow_forward</span>
+                                </button>
+                            </div>
+                            <div className="flex flex-col gap-2 rounded-lg p-5 bg-slate-50 dark:bg-gray-900/50 border border-slate-200 dark:border-gray-800">
+                                <p className="text-slate-500 dark:text-gray-400 text-sm font-medium">
+                                    {filterType === 'as_of' && asOfDate
+                                        ? `Stock on ${new Date(asOfDate).toLocaleDateString()}`
+                                        : 'Total Stock on Hand'}
+                                </p>
+                                <p className="text-slate-900 dark:text-white text-3xl font-bold">
+                                    {product.stock_quantity || 0} <span className="text-xl font-medium text-slate-500">{product.unit || 'Units'}</span>
+                                </p>
+                                {/* Display Period Stats if available */}
+                                {product.period_production > 0 && (
+                                    <p className="text-[#198754] text-sm font-medium">
+                                        +{product.period_production} Produced
+                                    </p>
+                                )}
+                                {product.period_sales > 0 && (
+                                    <p className="text-[#DC3545] text-sm font-medium">
+                                        -{product.period_sales} Sold
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+                <div className="flex justify-center mt-8 gap-2">
+                    <button
+                        disabled={page === 1}
+                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                        className="px-4 py-2 rounded-lg border border-slate-300 disabled:opacity-50"
+                    >
+                        Previous
+                    </button>
+                    <span className="flex items-center px-4 font-medium text-slate-600">
+                        Page {page} of {totalPages}
+                    </span>
+                    <button
+                        disabled={page === totalPages}
+                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                        className="px-4 py-2 rounded-lg border border-slate-300 disabled:opacity-50"
+                    >
+                        Next
+                    </button>
                 </div>
             )}
 
             {/* View Ledger Modal */}
-            {isLedgerModalOpen && (
+            {isLedgerModalOpen && selectedProduct && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-4xl border border-slate-200 dark:border-slate-800 h-[80vh] flex flex-col">
+                    <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-4xl border border-slate-200 dark:border-slate-800 h-[80vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
                         <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center shrink-0">
                             <div>
-                                <h3 className="text-xl font-bold text-slate-900 dark:text-white">Product Ledger</h3>
-                                <p className="text-sm text-slate-500 dark:text-slate-400">Detailed transaction history</p>
+                                <h3 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                    Product Ledger
+                                    <span className="text-sm font-normal text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">{selectedProduct.name}</span>
+                                </h3>
+                                <p className="text-sm text-slate-500 dark:text-slate-400">
+                                    {filterType === 'week' ? 'Last 7 Days' :
+                                        filterType === 'month' ? 'This Month' :
+                                            filterType === 'as_of' ? `Up to ${asOfDate}` :
+                                                'Transaction History'}
+                                </p>
                             </div>
-                            <button onClick={() => setIsLedgerModalOpen(false)} className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+                            <button onClick={() => setIsLedgerModalOpen(false)} className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors rounded-full p-1 hover:bg-slate-100 dark:hover:bg-slate-800">
                                 <span className="material-symbols-outlined">close</span>
                             </button>
                         </div>
-                        <div className="p-6 overflow-y-auto flex-1">
-                            <table className="w-full text-sm text-left">
-                                <thead className="text-xs text-slate-500 dark:text-slate-400 uppercase bg-slate-50 dark:bg-slate-800 sticky top-0">
-                                    <tr>
-                                        <th className="px-4 py-3">Date</th>
-                                        <th className="px-4 py-3">Transaction ID</th>
-                                        <th className="px-4 py-3">Type</th>
-                                        <th className="px-4 py-3 text-right">In</th>
-                                        <th className="px-4 py-3 text-right">Out</th>
-                                        <th className="px-4 py-3 text-right">Balance</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                                    <tr>
-                                        <td className="px-4 py-3 text-slate-900 dark:text-white">2023-10-25</td>
-                                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400">#TXN-001</td>
-                                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400">Production</td>
-                                        <td className="px-4 py-3 text-right text-green-600 font-medium">+5,000</td>
-                                        <td className="px-4 py-3 text-right text-slate-500">-</td>
-                                        <td className="px-4 py-3 text-right text-slate-900 dark:text-white font-bold">5,000</td>
-                                    </tr>
-                                    <tr>
-                                        <td className="px-4 py-3 text-slate-900 dark:text-white">2023-10-26</td>
-                                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400">#TXN-002</td>
-                                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400">Distributor Sale</td>
-                                        <td className="px-4 py-3 text-right text-slate-500">-</td>
-                                        <td className="px-4 py-3 text-right text-red-600 font-medium">-1,000</td>
-                                        <td className="px-4 py-3 text-right text-slate-900 dark:text-white font-bold">4,000</td>
-                                    </tr>
-                                    <tr>
-                                        <td className="px-4 py-3 text-slate-900 dark:text-white">2023-10-27</td>
-                                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400">#TXN-003</td>
-                                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400">Production</td>
-                                        <td className="px-4 py-3 text-right text-green-600 font-medium">+2,500</td>
-                                        <td className="px-4 py-3 text-right text-slate-500">-</td>
-                                        <td className="px-4 py-3 text-right text-slate-900 dark:text-white font-bold">6,500</td>
-                                    </tr>
-                                    <tr>
-                                        <td className="px-4 py-3 text-slate-900 dark:text-white">2023-10-28</td>
-                                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400">#TXN-004</td>
-                                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400">Distributor Sale</td>
-                                        <td className="px-4 py-3 text-right text-slate-500">-</td>
-                                        <td className="px-4 py-3 text-right text-red-600 font-medium">-500</td>
-                                        <td className="px-4 py-3 text-right text-slate-900 dark:text-white font-bold">6,000</td>
-                                    </tr>
-                                </tbody>
-                            </table>
+
+                        <div className="p-0 overflow-y-auto flex-1">
+                            {isLedgerLoading ? (
+                                <div className="h-full flex items-center justify-center">
+                                    <LoadingSpinner />
+                                </div>
+                            ) : !ledgerData?.results?.length ? (
+                                <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                                    <span className="material-symbols-outlined text-4xl mb-2 opacity-50">receipt_long</span>
+                                    <p>No transactions found for this period</p>
+                                </div>
+                            ) : (
+                                <table className="w-full text-sm text-left">
+                                    <thead className="text-xs text-slate-500 dark:text-slate-400 uppercase bg-slate-50 dark:bg-slate-800 sticky top-0 z-10">
+                                        <tr>
+                                            <th className="px-6 py-4 font-semibold">Date</th>
+                                            <th className="px-6 py-4 font-semibold">Transaction ID</th>
+                                            <th className="px-6 py-4 font-semibold">Type</th>
+                                            <th className="px-6 py-4 font-semibold text-right">In</th>
+                                            <th className="px-6 py-4 font-semibold text-right">Out</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                                        {ledgerData.results.map((txn) => (
+                                            <tr key={txn.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                                <td className="px-6 py-4 text-slate-900 dark:text-white font-medium">
+                                                    {new Date(txn.transaction_date || txn.created_at).toLocaleDateString()}
+                                                </td>
+                                                <td className="px-6 py-4 text-slate-500 dark:text-slate-400 font-mono text-xs">
+                                                    #{txn.id.slice(0, 8).toUpperCase()}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium 
+                                                        ${txn.transaction_type === 'in' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
+                                                        {txn.transaction_type || 'Transaction'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-right text-green-600 font-medium font-mono">
+                                                    {txn.transaction_type === 'in' || txn.quantity > 0 ? `+${Math.abs(txn.quantity).toLocaleString()}` : '-'}
+                                                </td>
+                                                <td className="px-6 py-4 text-right text-red-600 font-medium font-mono">
+                                                    {txn.transaction_type === 'out' || txn.quantity < 0 ? `-${Math.abs(txn.quantity).toLocaleString()}` : '-'}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
                         </div>
-                        <div className="p-6 border-t border-slate-200 dark:border-slate-800 flex justify-end">
-                            <button onClick={() => setIsLedgerModalOpen(false)} className="px-4 py-2 rounded-lg text-sm font-semibold bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200">Close</button>
+                        <div className="p-6 border-t border-slate-200 dark:border-slate-800 flex justify-end bg-slate-50 dark:bg-slate-900 rounded-b-xl">
+                            <button onClick={() => setIsLedgerModalOpen(false)} className="px-6 py-2.5 rounded-xl text-sm font-bold bg-white border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 shadow-sm transition-all focus:ring-2 focus:ring-slate-200">Close Ledger</button>
                         </div>
                     </div>
                 </div>
