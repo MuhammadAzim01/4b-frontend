@@ -11,6 +11,7 @@ import Financials from '../pages/Financials';
 import Production from '../pages/Production';
 import Warehouse from '../pages/Warehouse';
 import Employee from '../pages/Employee';
+import Expenses from '../pages/Expenses';
 
 export default function AdminRoutes() {
     return (
@@ -22,6 +23,7 @@ export default function AdminRoutes() {
                     <Route path="distributors" element={<Distributors />} />
                     <Route path="sales" element={<Sales />} />
                     <Route path="financials" element={<Financials />} />
+                    <Route path="expenses" element={<Expenses />} />
                     <Route path="production" element={<Production />} />
                     <Route path="warehouse" element={<Warehouse />} />
                     <Route path="employee" element={<Employee />} />
