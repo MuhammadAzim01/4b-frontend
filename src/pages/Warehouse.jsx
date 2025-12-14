@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import CreateProductModal from '../components/CreateProductModal';
 import { useCreateUpdateMutation } from '../hooks/useCreateUpdateMutation';
 import { useFetchQuery } from '../hooks/useFetchQuery';
 import { fetchWithAuth } from '../utils/fetchApis';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import { getAuthStatus } from '../utils/auth';
 
 const Warehouse = () => {
+    const navigate = useNavigate();
     const [isLedgerModalOpen, setIsLedgerModalOpen] = useState(false);
     const [isCreateProductModalOpen, setIsCreateProductModalOpen] = useState(false);
     const [selectedProduct, setSelectedProduct] = useState(null);
@@ -21,6 +24,8 @@ const Warehouse = () => {
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
     const [asOfDate, setAsOfDate] = useState('');
+
+    const { role } = getAuthStatus()?.user || {};
 
     // Debounce Search
     useEffect(() => {
@@ -49,7 +54,7 @@ const Warehouse = () => {
 
     // Fetch Products
     const { data: productsData, isFetching: isProductsLoading, refetch: refetchProducts } = useFetchQuery({
-        url: `production/products/${getQueryParams()}`,
+        url: `warehouse/products/${getQueryParams()}`,
         queryKey: ['products', page, debouncedSearch, filterType, customStartDate, customEndDate, asOfDate],
         fetchFunction: fetchWithAuth,
         keepPreviousData: true,
@@ -74,7 +79,7 @@ const Warehouse = () => {
     // Usually ledger needs the same context as the summary card.
     const getLedgerQueryParams = () => {
         if (!selectedProduct) return null;
-        let params = `inventory/transactions/?item=${selectedProduct.id}`;
+        let params = `warehouse/transactions/?item=${selectedProduct.id}`;
 
         if (filterType === 'as_of') {
             // For ledger, 'as_of' might mean 'transactions up to this date'
@@ -313,8 +318,9 @@ const Warehouse = () => {
                                 <table className="w-full text-sm text-left">
                                     <thead className="text-xs text-slate-500 dark:text-slate-400 uppercase bg-slate-50 dark:bg-slate-800 sticky top-0 z-10">
                                         <tr>
-                                            <th className="px-6 py-4 font-semibold">Date</th>
-                                            <th className="px-6 py-4 font-semibold">Transaction ID</th>
+                                            <th className="px-6 py-4 font-semibold">Date & Time</th>
+                                            <th className="px-6 py-4 font-semibold">Reference ID</th>
+                                            <th className="px-6 py-4 font-semibold">Info</th>
                                             <th className="px-6 py-4 font-semibold">Type</th>
                                             <th className="px-6 py-4 font-semibold text-right">In</th>
                                             <th className="px-6 py-4 font-semibold text-right">Out</th>
@@ -323,23 +329,36 @@ const Warehouse = () => {
                                     <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                                         {ledgerData.results.map((txn) => (
                                             <tr key={txn.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                                                <td className="px-6 py-4 text-slate-900 dark:text-white font-medium">
-                                                    {new Date(txn.transaction_date || txn.created_at).toLocaleDateString()}
-                                                </td>
-                                                <td className="px-6 py-4 text-slate-500 dark:text-slate-400 font-mono text-xs">
-                                                    #{txn.id.slice(0, 8).toUpperCase()}
+                                                <td className="px-6 py-4 text-slate-900 dark:text-white">
+                                                    <div className="font-medium">{new Date(txn.transaction_date).toLocaleDateString()}</div>
+                                                    <div className="text-xs text-slate-500">{new Date(txn.transaction_date).toLocaleTimeString()}</div>
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium 
-                                                        ${txn.transaction_type === 'in' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
-                                                        {txn.transaction_type || 'Transaction'}
+                                                    {txn.transaction_type === 'in' ? (
+                                                        <button
+                                                            onClick={() => navigate(`/${role}/production/${txn.id}`)}
+                                                            className="text-slate-900 dark:text-white font-mono text-sm font-semibold hover:text-blue-600 dark:hover:text-blue-400 underline decoration-dotted hover:decoration-solid cursor-pointer"
+                                                        >
+                                                            {txn.id}
+                                                        </button>
+                                                    ) : (
+                                                        <span className="text-slate-900 dark:text-white font-mono text-sm font-semibold">{txn.id}</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4 text-slate-600 dark:text-slate-400 text-xs">
+                                                    {txn.reference_info}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium uppercase
+                                                        ${txn.transaction_type === 'in' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'}`}>
+                                                        {txn.transaction_type}
                                                     </span>
                                                 </td>
-                                                <td className="px-6 py-4 text-right text-green-600 font-medium font-mono">
-                                                    {txn.transaction_type === 'in' || txn.quantity > 0 ? `+${Math.abs(txn.quantity).toLocaleString()}` : '-'}
+                                                <td className="px-6 py-4 text-right text-green-600 dark:text-green-400 font-medium font-mono">
+                                                    {txn.transaction_type === 'in' ? `+${Math.abs(txn.quantity).toLocaleString()}` : '-'}
                                                 </td>
-                                                <td className="px-6 py-4 text-right text-red-600 font-medium font-mono">
-                                                    {txn.transaction_type === 'out' || txn.quantity < 0 ? `-${Math.abs(txn.quantity).toLocaleString()}` : '-'}
+                                                <td className="px-6 py-4 text-right text-red-600 dark:text-red-400 font-medium font-mono">
+                                                    {txn.transaction_type === 'out' ? `-${Math.abs(txn.quantity).toLocaleString()}` : '-'}
                                                 </td>
                                             </tr>
                                         ))}

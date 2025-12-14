@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
+import { fetchWithAuth } from '../utils/fetchApis';
 
 const DEFAULT_CATEGORIES = [
     { id: 'rent', name: 'Rent', icon: 'home' },
@@ -16,13 +17,14 @@ const DEFAULT_CATEGORIES = [
 const Expenses = () => {
     // State
     const [expenses, setExpenses] = useState([]);
-    const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
+    const [categories, setCategories] = useState([]);
     const [filterDate, setFilterDate] = useState('all'); // all, today, month
     const [filterCategory, setFilterCategory] = useState('all');
+    const [loading, setLoading] = useState(true);
 
     // Form State
     const [amount, setAmount] = useState('');
-    const [category, setCategory] = useState('other'); // Default to 'other'
+    const [category, setCategory] = useState('');
     const [description, setDescription] = useState('');
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
 
@@ -33,33 +35,63 @@ const Expenses = () => {
 
     // Load data on mount
     useEffect(() => {
-        const savedExpenses = localStorage.getItem('expenses');
-        const savedCategories = localStorage.getItem('expenseCategories');
-
-        if (savedExpenses) setExpenses(JSON.parse(savedExpenses));
-        if (savedCategories) {
-            let loadedCategories = JSON.parse(savedCategories);
-            // Ensure 'other' exists
-            if (!loadedCategories.some(c => c.id === 'other')) {
-                loadedCategories.push({ id: 'other', name: 'Other', icon: 'receipt' });
-            }
-            // Ensure 'other' is at the end
-            loadedCategories = [
-                ...loadedCategories.filter(c => c.id !== 'other'),
-                loadedCategories.find(c => c.id === 'other')
-            ];
-            setCategories(loadedCategories);
-        }
+        fetchData();
     }, []);
 
-    // Save data on change
-    useEffect(() => {
-        localStorage.setItem('expenses', JSON.stringify(expenses));
-    }, [expenses]);
+    const fetchData = async () => {
+        setLoading(true);
+        try {
+            // Fetch categories
+            const categoriesResponse = await fetchWithAuth('expenses/categories/');
+            let fetchedCategories = categoriesResponse.data.results || categoriesResponse.data;
+            
+            // If no categories exist, create default ones
+            if (fetchedCategories.length === 0) {
+                await createDefaultCategories();
+                const newCategoriesResponse = await fetchWithAuth('expenses/categories/');
+                fetchedCategories = newCategoriesResponse.data.results || newCategoriesResponse.data;
+            }
+            
+            setCategories(fetchedCategories);
+            
+            // Set default category
+            const defaultCat = fetchedCategories.find(c => c.name.toLowerCase() === 'other') || fetchedCategories[0];
+            if (defaultCat) setCategory(defaultCat.id);
 
-    useEffect(() => {
-        localStorage.setItem('expenseCategories', JSON.stringify(categories));
-    }, [categories]);
+            // Fetch expenses
+            await fetchExpenses();
+        } catch (error) {
+            console.error('Error fetching data:', error);
+            toast.error('Failed to load data');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const createDefaultCategories = async () => {
+        try {
+            const promises = DEFAULT_CATEGORIES.map(cat =>
+                fetchWithAuth('expenses/categories/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(cat)
+                })
+            );
+            await Promise.all(promises);
+        } catch (error) {
+            console.error('Error creating default categories:', error);
+        }
+    };
+
+    const fetchExpenses = async () => {
+        try {
+            const response = await fetchWithAuth('expenses/');
+            setExpenses(response.data.results || response.data);
+        } catch (error) {
+            console.error('Error fetching expenses:', error);
+            toast.error('Failed to load expenses');
+        }
+    };
 
     // Derived Data
     const filteredExpenses = expenses.filter(expense => {
@@ -73,7 +105,7 @@ const Expenses = () => {
         if (filterDate === 'month') dateMatch = isThisMonth;
 
         let categoryMatch = true;
-        if (filterCategory !== 'all') categoryMatch = expense.category === filterCategory;
+        if (filterCategory !== 'all') categoryMatch = expense.category === parseInt(filterCategory);
 
         return dateMatch && categoryMatch;
     }).sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -95,65 +127,93 @@ const Expenses = () => {
         .reduce((sum, e) => sum + parseFloat(e.amount), 0);
 
     // Handlers
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!amount || !description) return;
+        if (!amount || !description || !category) return;
 
-        const newExpense = {
-            id: Date.now().toString(),
-            amount: parseFloat(amount),
-            category,
-            description,
-            date,
-            createdAt: new Date().toISOString()
-        };
+        try {
+            const payload = {
+                amount: parseFloat(amount),
+                category: parseInt(category),
+                description,
+                date,
+            };
 
-        setExpenses([newExpense, ...expenses]);
-        toast.success('Expense added successfully');
+            const response = await fetchWithAuth('expenses/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
 
-        // Reset form
-        setAmount('');
-        setDescription('');
+            setExpenses([response.data, ...expenses]);
+            toast.success('Expense added successfully');
+
+            // Reset form
+            setAmount('');
+            setDescription('');
+        } catch (error) {
+            console.error('Error adding expense:', error);
+            toast.error(error.message || 'Failed to add expense');
+        }
     };
 
-    const handleAddCategory = (e) => {
+    const handleAddCategory = async (e) => {
         e.preventDefault();
         if (!newCategoryName) return;
 
-        const newCat = {
-            id: newCategoryName.toLowerCase().replace(/\s+/g, '_'),
-            name: newCategoryName,
-            icon: newCategoryIcon
-        };
-
         // Check duplicates
-        if (categories.some(c => c.id === newCat.id)) {
+        if (categories.some(c => c.name.toLowerCase() === newCategoryName.toLowerCase())) {
             toast.error('Category with this name already exists');
             return;
         }
 
-        // Add before 'other'
-        const otherCat = categories.find(c => c.id === 'other');
-        const otherCats = categories.filter(c => c.id !== 'other');
+        try {
+            const response = await fetchWithAuth('expenses/categories/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: newCategoryName,
+                    icon: newCategoryIcon
+                })
+            });
 
-        setCategories([...otherCats, newCat, otherCat]);
-        setNewCategoryName('');
-        setIsAddingCategory(false);
-        toast.success('Category added');
+            setCategories([...categories, response.data]);
+            setNewCategoryName('');
+            setNewCategoryIcon('receipt');
+            setIsAddingCategory(false);
+            toast.success('Category added');
+        } catch (error) {
+            console.error('Error adding category:', error);
+            toast.error(error.message || 'Failed to add category');
+        }
     };
 
-    const handleDeleteCategory = (catId, e) => {
+    const handleDeleteCategory = async (catId, e) => {
         e.stopPropagation();
         e.preventDefault();
 
-        if (catId === 'other') {
-            toast.error("Cannot remove default 'Other' category");
+        const categoryToDelete = categories.find(c => c.id === catId);
+        if (categoryToDelete?.is_default) {
+            toast.error("Cannot remove default categories");
             return;
         }
 
-        if (confirm(`Remove category? This won't delete past expenses.`)) {
+        if (!confirm(`Remove category? This won't delete past expenses.`)) return;
+
+        try {
+            await fetchWithAuth(`expenses/categories/${catId}/`, {
+                method: 'DELETE'
+            });
+
             setCategories(categories.filter(c => c.id !== catId));
-            if (category === catId) setCategory('other');
+            if (category === catId) {
+                const defaultCat = categories.find(c => c.name.toLowerCase() === 'other') || categories[0];
+                setCategory(defaultCat?.id || '');
+            }
+            toast.success('Category deleted');
+        } catch (error) {
+            console.error('Error deleting category:', error);
+            toast.error(error.message || 'Failed to delete category');
         }
     };
 
@@ -274,8 +334,8 @@ const Expenses = () => {
                                                 {cat.name}
                                             </button>
 
-                                            {/* Delete Category Button - Protected for 'other' */}
-                                            {cat.id !== 'other' && (
+                                            {/* Delete Category Button - Protected for default categories */}
+                                            {!cat.is_default && (
                                                 <button
                                                     type="button"
                                                     onClick={(e) => handleDeleteCategory(cat.id, e)}
@@ -354,7 +414,12 @@ const Expenses = () => {
                         </div>
 
                         <div className="overflow-x-auto flex-1">
-                            {filteredExpenses.length === 0 ? (
+                            {loading ? (
+                                <div className="h-64 flex flex-col items-center justify-center text-slate-400">
+                                    <span className="material-symbols-outlined text-4xl mb-2 opacity-50 animate-spin">refresh</span>
+                                    <p>Loading expenses...</p>
+                                </div>
+                            ) : filteredExpenses.length === 0 ? (
                                 <div className="h-64 flex flex-col items-center justify-center text-slate-400">
                                     <span className="material-symbols-outlined text-4xl mb-2 opacity-50">receipt_long</span>
                                     <p>No expenses found</p>
@@ -378,9 +443,9 @@ const Expenses = () => {
                                                 <td className="px-6 py-4">
                                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                                                         <span className="material-symbols-outlined text-[14px]">
-                                                            {categories.find(c => c.id === expense.category)?.icon || 'receipt'}
+                                                            {expense.category_icon || 'receipt'}
                                                         </span>
-                                                        {categories.find(c => c.id === expense.category)?.name || expense.category}
+                                                        {expense.category_name || 'Unknown'}
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400 max-w-xs truncate">
