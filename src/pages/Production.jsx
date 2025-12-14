@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { toast } from 'sonner';
 
@@ -9,22 +10,34 @@ import { generateInvoiceHtml } from '../components/InvoiceTemplate';
 import StartProductionModal from '../components/StartProductionModal';
 import EndProductionModal from '../components/EndProductionModal';
 import ProductionDetailsModal from '../components/ProductionDetailsModal';
+import { getAuthStatus } from '../utils/auth';
 
 const Production = () => {
+    const { batchNumber } = useParams();
+    const navigate = useNavigate();
     const [isStartModalOpen, setIsStartModalOpen] = useState(false);
     const [isEndModalOpen, setIsEndModalOpen] = useState(false);
     const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
     const [currentRun, setCurrentRun] = useState(null);
     const [selectedHistoryRun, setSelectedHistoryRun] = useState(null);
     const [historyPage, setHistoryPage] = useState(1);
+    const { role } = getAuthStatus()?.user || {};
 
     // Fetch production batches with pagination
     const { data, isFetching, isError, error, refetch } = useFetchQuery({
-        url: `production/batches/?page=${historyPage}&page_size=5`,
-        queryKey: ['production-batches', historyPage],
+        url: `production/batches/?page=${historyPage}&page_size=5${batchNumber ? `&batch_number=${batchNumber}` : ''}`,
+        queryKey: ['production-batches', historyPage, batchNumber],
         fetchFunction: fetchWithAuth,
         staleTime: 2 * 60 * 1000,
     });
+
+    // Handle batchNumber from URL params
+    useEffect(() => {
+        if (batchNumber && data?.results?.[0]) {
+            setSelectedHistoryRun(data.results[0]);
+            setIsDetailsModalOpen(true);
+        }
+    }, [batchNumber, data]);
 
     // Start production mutation
     const startProductionMutation = useCreateUpdateMutation({
@@ -216,10 +229,7 @@ const Production = () => {
                                         history.map((run) => (
                                             <tr
                                                 key={run.id}
-                                                onClick={() => {
-                                                    setSelectedHistoryRun(run);
-                                                    setIsDetailsModalOpen(true);
-                                                }}
+                                                onClick={() => navigate(`/${role}/production/${run.batch_number}`)}
                                                 className="border-b border-slate-200 dark:border-gray-700 hover:bg-slate-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer group"
                                             >
                                                 <td className="px-4 py-3 font-mono text-xs text-slate-900 dark:text-white font-medium group-hover:text-eva-blue transition-colors">{run.batch_number}</td>
@@ -302,7 +312,10 @@ const Production = () => {
 
             <ProductionDetailsModal
                 isOpen={isDetailsModalOpen}
-                onClose={() => setIsDetailsModalOpen(false)}
+                onClose={() => {
+                    setIsDetailsModalOpen(false);
+                    if (batchNumber) navigate(`/${role}/production`);
+                }}
                 run={selectedHistoryRun}
             />
         </div>

@@ -25,6 +25,7 @@ export default function AdminRoutes() {
                     <Route path="financials" element={<Financials />} />
                     <Route path="expenses" element={<Expenses />} />
                     <Route path="production" element={<Production />} />
+                    <Route path="production/:batchNumber" element={<Production />} />
                     <Route path="warehouse" element={<Warehouse />} />
                     <Route path="employee" element={<Employee />} />
                     <Route path="*" element={<Navigate to="home" replace />} />

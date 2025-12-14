@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import CreateProductModal from '../components/CreateProductModal';
 import { useCreateUpdateMutation } from '../hooks/useCreateUpdateMutation';
 import { useFetchQuery } from '../hooks/useFetchQuery';
 import { fetchWithAuth } from '../utils/fetchApis';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import { getAuthStatus } from '../utils/auth';
 
 const Warehouse = () => {
+    const navigate = useNavigate();
     const [isLedgerModalOpen, setIsLedgerModalOpen] = useState(false);
     const [isCreateProductModalOpen, setIsCreateProductModalOpen] = useState(false);
     const [selectedProduct, setSelectedProduct] = useState(null);
@@ -21,6 +24,8 @@ const Warehouse = () => {
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
     const [asOfDate, setAsOfDate] = useState('');
+
+    const { role } = getAuthStatus()?.user || {};
 
     // Debounce Search
     useEffect(() => {
@@ -328,8 +333,17 @@ const Warehouse = () => {
                                                     <div className="font-medium">{new Date(txn.transaction_date).toLocaleDateString()}</div>
                                                     <div className="text-xs text-slate-500">{new Date(txn.transaction_date).toLocaleTimeString()}</div>
                                                 </td>
-                                                <td className="px-6 py-4 text-slate-900 dark:text-white font-mono text-sm font-semibold">
-                                                    {txn.id}
+                                                <td className="px-6 py-4">
+                                                    {txn.transaction_type === 'in' ? (
+                                                        <button
+                                                            onClick={() => navigate(`/${role}/production/${txn.id}`)}
+                                                            className="text-slate-900 dark:text-white font-mono text-sm font-semibold hover:text-blue-600 dark:hover:text-blue-400 underline decoration-dotted hover:decoration-solid cursor-pointer"
+                                                        >
+                                                            {txn.id}
+                                                        </button>
+                                                    ) : (
+                                                        <span className="text-slate-900 dark:text-white font-mono text-sm font-semibold">{txn.id}</span>
+                                                    )}
                                                 </td>
                                                 <td className="px-6 py-4 text-slate-600 dark:text-slate-400 text-xs">
                                                     {txn.reference_info}
