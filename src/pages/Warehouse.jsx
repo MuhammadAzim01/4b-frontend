@@ -25,6 +25,12 @@ const Warehouse = () => {
     const [customEndDate, setCustomEndDate] = useState('');
     const [asOfDate, setAsOfDate] = useState('');
 
+    // Ledger Filters
+    const [ledgerFilterType, setLedgerFilterType] = useState('month');
+    const [ledgerStartDate, setLedgerStartDate] = useState('');
+    const [ledgerEndDate, setLedgerEndDate] = useState('');
+    const [ledgerTxType, setLedgerTxType] = useState('all'); // 'all', 'in', 'out'
+
     const { role } = getAuthStatus()?.user || {};
 
     // Debounce Search
@@ -75,34 +81,37 @@ const Warehouse = () => {
     });
 
     // Fetch Ledger for selected product
-    // Ledger shares the same date filters or can be overridden. 
-    // Usually ledger needs the same context as the summary card.
     const getLedgerQueryParams = () => {
         if (!selectedProduct) return null;
         let params = `warehouse/transactions/?item=${selectedProduct.id}`;
 
-        if (filterType === 'as_of') {
-            // For ledger, 'as_of' might mean 'transactions up to this date'
-            if (asOfDate) params += `&end_date=${asOfDate}`;
-        } else {
-            params += `&date_range=${filterType}`;
-            if (filterType === 'custom') {
-                if (customStartDate) params += `&start_date=${customStartDate}`;
-                if (customEndDate) params += `&end_date=${customEndDate}`;
-            }
+        params += `&date_range=${ledgerFilterType}`;
+        if (ledgerFilterType === 'custom') {
+            if (ledgerStartDate) params += `&start_date=${ledgerStartDate}`;
+            if (ledgerEndDate) params += `&end_date=${ledgerEndDate}`;
         }
+
+        if (ledgerTxType !== 'all') {
+            params += `&transaction_type=${ledgerTxType}`;
+        }
+
         return params;
     };
 
     const { data: ledgerData, isFetching: isLedgerLoading } = useFetchQuery({
         url: getLedgerQueryParams(),
-        queryKey: ['product_ledger', selectedProduct?.id, filterType, customStartDate, customEndDate, asOfDate],
+        queryKey: ['product_ledger', selectedProduct?.id, ledgerFilterType, ledgerStartDate, ledgerEndDate, ledgerTxType],
         fetchFunction: fetchWithAuth,
         enabled: !!selectedProduct,
     });
 
     const handleViewLedgerClick = (product) => {
         setSelectedProduct(product);
+        // Reset ledger filters to default on open
+        setLedgerFilterType('month');
+        setLedgerTxType('all');
+        setLedgerStartDate('');
+        setLedgerEndDate('');
         setIsLedgerModalOpen(true);
     };
 
@@ -158,8 +167,8 @@ const Warehouse = () => {
                                 key={filter.id}
                                 onClick={() => setFilterType(filter.id)}
                                 className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${filterType === filter.id
-                                        ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
-                                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                                    ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
                                     }`}
                             >
                                 {filter.label}
@@ -286,22 +295,66 @@ const Warehouse = () => {
             {isLedgerModalOpen && selectedProduct && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                     <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-4xl border border-slate-200 dark:border-slate-800 h-[80vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
-                        <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center shrink-0">
-                            <div>
-                                <h3 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                                    Product Ledger
-                                    <span className="text-sm font-normal text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">{selectedProduct.name}</span>
-                                </h3>
-                                <p className="text-sm text-slate-500 dark:text-slate-400">
-                                    {filterType === 'week' ? 'Last 7 Days' :
-                                        filterType === 'month' ? 'This Month' :
-                                            filterType === 'as_of' ? `Up to ${asOfDate}` :
-                                                'Transaction History'}
-                                </p>
+                        <div className="p-6 border-b border-slate-200 dark:border-slate-800 shrink-0">
+                            <div className="flex justify-between items-center mb-4">
+                                <div>
+                                    <h3 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                        Product Ledger
+                                        <span className="text-sm font-normal text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">{selectedProduct.name}</span>
+                                    </h3>
+                                </div>
+                                <button onClick={() => setIsLedgerModalOpen(false)} className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors rounded-full p-1 hover:bg-slate-100 dark:hover:bg-slate-800">
+                                    <span className="material-symbols-outlined">close</span>
+                                </button>
                             </div>
-                            <button onClick={() => setIsLedgerModalOpen(false)} className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors rounded-full p-1 hover:bg-slate-100 dark:hover:bg-slate-800">
-                                <span className="material-symbols-outlined">close</span>
-                            </button>
+
+                            {/* Filters */}
+                            <div className="flex flex-wrap gap-4 items-center">
+                                <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
+                                    {['week', 'month', 'custom'].map(type => (
+                                        <button
+                                            key={type}
+                                            onClick={() => setLedgerFilterType(type)}
+                                            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${ledgerFilterType === type
+                                                    ? 'bg-white dark:bg-slate-700 shadow text-slate-900 dark:text-white'
+                                                    : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                                                }`}
+                                        >
+                                            {type === 'week' ? 'Last 7 Days' : type === 'month' ? 'This Month' : 'Custom'}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {ledgerFilterType === 'custom' && (
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="date"
+                                            value={ledgerStartDate}
+                                            onChange={(e) => setLedgerStartDate(e.target.value)}
+                                            className="h-8 px-2 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs"
+                                        />
+                                        <span className="text-slate-400">-</span>
+                                        <input
+                                            type="date"
+                                            value={ledgerEndDate}
+                                            onChange={(e) => setLedgerEndDate(e.target.value)}
+                                            className="h-8 px-2 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs"
+                                        />
+                                    </div>
+                                )}
+
+                                <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-2"></div>
+
+                                <select
+                                    value={ledgerTxType}
+                                    onChange={(e) => setLedgerTxType(e.target.value)}
+                                    className="h-8 pl-2 pr-8 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-medium outline-none focus:ring-1 focus:ring-eva-blue"
+                                >
+                                    <option value="all">All Types</option>
+                                    <option value="in">Production Only (IN)</option>
+                                    <option value="out">Sales Only (OUT)</option>
+                                </select>
+                            </div>
                         </div>
 
                         <div className="p-0 overflow-y-auto flex-1">
@@ -312,7 +365,7 @@ const Warehouse = () => {
                             ) : !ledgerData?.results?.length ? (
                                 <div className="h-full flex flex-col items-center justify-center text-slate-400">
                                     <span className="material-symbols-outlined text-4xl mb-2 opacity-50">receipt_long</span>
-                                    <p>No transactions found for this period</p>
+                                    <p>No transactions found for this selection</p>
                                 </div>
                             ) : (
                                 <table className="w-full text-sm text-left">

@@ -4,6 +4,7 @@ import { QueryClientProvider, QueryClient } from '@tanstack/react-query';;
 
 import { ModalProvider } from './context/ModalContext';
 import { InventoryProvider } from './context/InventoryContext';
+import { NotificationProvider } from './context/NotificationContext';
 
 import Router from './router/Router';
 
@@ -18,7 +19,9 @@ function App() {
       }} />
       <ModalProvider>
         <InventoryProvider>
-          <RouterProvider router={Router} />
+          <NotificationProvider>
+            <RouterProvider router={Router} />
+          </NotificationProvider>
         </InventoryProvider>
       </ModalProvider>
     </QueryClientProvider>

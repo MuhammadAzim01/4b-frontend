@@ -44,16 +44,23 @@ const Expenses = () => {
             // Fetch categories
             const categoriesResponse = await fetchWithAuth('expenses/categories/');
             let fetchedCategories = categoriesResponse.data.results || categoriesResponse.data;
-            
+
             // If no categories exist, create default ones
             if (fetchedCategories.length === 0) {
                 await createDefaultCategories();
                 const newCategoriesResponse = await fetchWithAuth('expenses/categories/');
                 fetchedCategories = newCategoriesResponse.data.results || newCategoriesResponse.data;
             }
-            
+
+            // Sort categories to put 'Other' at the bottom
+            fetchedCategories.sort((a, b) => {
+                if (a.id === 'other' || a.name.toLowerCase() === 'other') return 1;
+                if (b.id === 'other' || b.name.toLowerCase() === 'other') return -1;
+                return 0;
+            });
+
             setCategories(fetchedCategories);
-            
+
             // Set default category
             const defaultCat = fetchedCategories.find(c => c.name.toLowerCase() === 'other') || fetchedCategories[0];
             if (defaultCat) setCategory(defaultCat.id);
@@ -177,7 +184,14 @@ const Expenses = () => {
                 })
             });
 
-            setCategories([...categories, response.data]);
+            // Maintain sorting when adding new category
+            const updatedCategories = [...categories, response.data].sort((a, b) => {
+                if (a.id === 'other' || a.name.toLowerCase() === 'other') return 1;
+                if (b.id === 'other' || b.name.toLowerCase() === 'other') return -1;
+                return 0;
+            });
+
+            setCategories(updatedCategories);
             setNewCategoryName('');
             setNewCategoryIcon('receipt');
             setIsAddingCategory(false);
@@ -193,8 +207,9 @@ const Expenses = () => {
         e.preventDefault();
 
         const categoryToDelete = categories.find(c => c.id === catId);
-        if (categoryToDelete?.is_default) {
-            toast.error("Cannot remove default categories");
+        // Prevent deleting default categories OR 'other' category specifically
+        if (categoryToDelete?.is_default || categoryToDelete?.id === 'other' || categoryToDelete?.name.toLowerCase() === 'other') {
+            toast.error("Cannot remove this category");
             return;
         }
 
@@ -278,7 +293,12 @@ const Expenses = () => {
                                         step="0.01"
                                         required
                                         value={amount}
-                                        onChange={(e) => setAmount(e.target.value)}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            if (val === '' || parseFloat(val) >= 0) {
+                                                setAmount(val);
+                                            }
+                                        }}
                                         className="w-full pl-8 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-eva-blue dark:text-white transition-all"
                                         placeholder="0.00"
                                     />
@@ -326,16 +346,16 @@ const Expenses = () => {
                                                 type="button"
                                                 onClick={() => setCategory(cat.id)}
                                                 className={`w-full flex flex-col items-center justify-center p-2 rounded-xl text-xs transition-all ${category === cat.id
-                                                        ? 'bg-eva-blue text-white shadow-md transform scale-105'
-                                                        : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                                    ? 'bg-eva-blue text-white shadow-md transform scale-105'
+                                                    : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
                                                     }`}
                                             >
                                                 <span className="material-symbols-outlined text-lg mb-1">{cat.icon}</span>
                                                 {cat.name}
                                             </button>
 
-                                            {/* Delete Category Button - Protected for default categories */}
-                                            {!cat.is_default && (
+                                            {/* Delete Category Button - Protected for default categories and Other */}
+                                            {!cat.is_default && cat.id !== 'other' && cat.name.toLowerCase() !== 'other' && (
                                                 <button
                                                     type="button"
                                                     onClick={(e) => handleDeleteCategory(cat.id, e)}

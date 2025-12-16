@@ -14,7 +14,7 @@ const PurchaseModal = ({ isOpen, onClose, role, onOpenCreateModal }) => {
         note: ''
     });
     const [isCustomSupplier, setIsCustomSupplier] = useState(false);
-    
+
     const addItemTransactionMutation = useCreateUpdateMutation({
         url: `inventory/transactions/`,
         method: 'POST',
@@ -45,14 +45,14 @@ const PurchaseModal = ({ isOpen, onClose, role, onOpenCreateModal }) => {
         staleTime: 5 * 60 * 1000,
     });
 
-    
-    
+
+
     const suppliers = suppliersResult?.results || [];
 
     const categoryItems = data?.results.map(item => ({ id: item.id, name: item.name })) || [];
 
     if (!isOpen) return null;
-    
+
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -67,6 +67,11 @@ const PurchaseModal = ({ isOpen, onClose, role, onOpenCreateModal }) => {
                 }
             } else {
                 setFormData(prev => ({ ...prev, name: value }));
+            }
+        } else if (name === 'quantity' || name === 'unitValue') {
+            // Prevent negative values
+            if (value === '' || parseFloat(value) >= 0) {
+                setFormData(prev => ({ ...prev, [name]: value }));
             }
         } else {
             setFormData(prev => ({ ...prev, [name]: value }));
@@ -165,8 +170,8 @@ const PurchaseModal = ({ isOpen, onClose, role, onOpenCreateModal }) => {
                                 value={formData.supplier}
                                 onChange={handleSupplierChange}
                                 className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white dark:bg-background-dark dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-eva-blue focus:border-transparent outline-none transition"
-                            placeholder="Enter supplier name"
-                        />
+                                placeholder="Enter supplier name"
+                            />
                         )}
                     </div>
 

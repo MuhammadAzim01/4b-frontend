@@ -115,6 +115,28 @@ const EndProductionModal = ({ isOpen, onClose, onEnd, runData }) => {
     const handleSubmit = (e) => {
         e.preventDefault();
 
+        // Calculate totals for validation
+        const totalInput = runData?.raw_materials?.reduce((sum, m) => sum + parseFloat(m.quantity_used || 0), 0) || 0;
+
+        const totalWaste = wasteItems.reduce((sum, w) => sum + (parseFloat(w.quantity) || 0), 0);
+        const totalReturned = returnedItems.reduce((sum, r) => sum + (parseFloat(r.quantity) || 0), 0);
+        const productQty = parseFloat(outputQuantity) || 0;
+
+        const totalOutput = productQty + totalWaste + totalReturned;
+
+        // Validation 1: Product Logic Cap
+        if (productQty > totalInput) {
+            toast.error(`Product quantity (${productQty}) cannot exceed total raw materials used (${totalInput})`);
+            return;
+        }
+
+        // Validation 2: Balance Check (Conservation of Mass)
+        // allowing a small epsilon for floating point math if needed, but strict is better for now
+        if (Math.abs(totalInput - totalOutput) > 0.01) {
+            toast.error(`Production imbalance! Input (${totalInput}) must equal Output (${totalOutput}). Difference: ${(totalInput - totalOutput).toFixed(2)}`);
+            return;
+        }
+
         const wasteSummary = wasteItems
             .filter(w => w.materialId && w.quantity)
             .map(w => {
