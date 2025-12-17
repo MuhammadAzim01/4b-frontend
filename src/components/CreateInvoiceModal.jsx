@@ -70,9 +70,9 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
         return sum + (Number(invoice?.balance_due || 0));
     }, 0);
 
-    
+
     const paymentDifference = parseFloat(amountPaid || 0) - totalDue;
-    
+
     const getTotalAmount = () => {
         if (transactionType === 'payment') {
             return parseFloat(amountPaid || 0);
@@ -221,10 +221,15 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                                             required
                                             type="number"
                                             placeholder="Price"
-                                            min="0.01"
+                                            min="0"
                                             step="0.01"
                                             value={item.unitPrice}
-                                            onChange={(e) => handleItemChange(item.id, 'unitPrice', e.target.value)}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                if (val === '' || parseFloat(val) >= 0) {
+                                                    handleItemChange(item.id, 'unitPrice', val);
+                                                }
+                                            }}
                                             className="w-28 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
                                         />
                                         {items.length > 1 && (
@@ -240,7 +245,10 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                                 ))}
                                 <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-800 flex justify-between items-center">
                                     <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Total Amount:</span>
-                                    <span className="text-lg font-bold text-eva-blue">₹{getTotalAmount().toFixed(2)}</span>
+                                    {/* Show integer if possible, else 2 decimals */}
+                                    <span className="text-lg font-bold text-eva-blue">
+                                        ₹{getTotalAmount() % 1 === 0 ? getTotalAmount() : getTotalAmount().toFixed(2)}
+                                    </span>
                                 </div>
                             </div>
 
@@ -249,11 +257,16 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                                     <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Amount Paid (Partial)</label>
                                     <input
                                         type="number"
-                                        placeholder="0.00"
+                                        placeholder="0"
                                         min="0"
                                         step="0.01"
                                         value={amountPaid}
-                                        onChange={(e) => setAmountPaid(e.target.value)}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            if (val === '' || parseFloat(val) >= 0) {
+                                                setAmountPaid(val);
+                                            }
+                                        }}
                                         className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
                                     />
                                 </div>
@@ -268,7 +281,7 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                                         <span className="text-xs text-slate-500">{selectedInvoices.length} selected</span>
                                     )}
                                 </div>
-                                
+
                                 {pendingInvoices && pendingInvoices.length > 0 && (
                                     <input
                                         type="text"
@@ -325,11 +338,16 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                                 <input
                                     required
                                     type="number"
-                                    placeholder="0.00"
-                                    min="0.01"
+                                    placeholder="0"
+                                    min="0"
                                     step="0.01"
                                     value={amountPaid}
-                                    onChange={(e) => setAmountPaid(e.target.value)}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === '' || parseFloat(val) >= 0) {
+                                            setAmountPaid(val);
+                                        }
+                                    }}
                                     className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
                                 />
                                 {amountPaid && selectedInvoices.length > 0 && (
