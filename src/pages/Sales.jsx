@@ -365,8 +365,11 @@ const Sales = () => {
                     <div className="bg-white dark:bg-background-dark p-6 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700">
                         <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
                             <span className="material-symbols-outlined text-green-600">receipt_long</span>
-                            Recent Transactions
+                            All Transactions
                         </h3>
+                        <p className="text-xs text-slate-500 dark:text-gray-400 mb-3">
+                            Sales (debit/income), Expenses (credit), and Inventory purchases (credit)
+                        </p>
                         
                         {transactions.length === 0 ? (
                             <p className="text-slate-500 text-sm text-center py-8">No transactions in this period</p>
@@ -386,41 +389,59 @@ const Sales = () => {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {transactions.map((txn) => (
-                                                <tr
-                                                    key={txn.id}
-                                                    className="border-b border-slate-200 dark:border-gray-700 hover:bg-slate-50 dark:hover:bg-gray-800/50 transition-colors"
-                                                >
-                                                    <td className="px-3 py-3">
-                                                        <span className="font-mono text-xs text-blue-600 dark:text-blue-400 font-medium">
-                                                            {txn.invoice_number}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-3 py-3">
-                                                        <div>
-                                                            <p className="font-medium text-slate-900 dark:text-white text-xs">{txn.distributor_name}</p>
-                                                            <p className="text-xs text-slate-500 dark:text-gray-400">{txn.distributor_area}</p>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-3 py-3 text-slate-500 dark:text-gray-400">
-                                                        {new Date(txn.created_at).toLocaleDateString()}
-                                                    </td>
-                                                    <td className="px-3 py-3">
-                                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
-                                                            {txn.payment_type}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-3 py-3 text-right font-mono text-slate-900 dark:text-white">
-                                                        ₹{parseFloat(txn.total_amount).toFixed(2)}
-                                                    </td>
-                                                    <td className="px-3 py-3 text-right font-mono text-green-600 dark:text-green-400">
-                                                        ₹{parseFloat(txn.amount_paid).toFixed(2)}
-                                                    </td>
-                                                    <td className="px-3 py-3 text-right font-mono text-red-600 dark:text-red-400">
-                                                        ₹{parseFloat(txn.balance_due).toFixed(2)}
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                            {transactions.map((txn) => {
+                                                const isDebit = txn.type === 'sale';
+                                                const isCredit = txn.type === 'expense' || txn.type === 'inventory';
+                                                
+                                                return (
+                                                    <tr
+                                                        key={txn.id}
+                                                        className="border-b border-slate-200 dark:border-gray-700 hover:bg-slate-50 dark:hover:bg-gray-800/50 transition-colors"
+                                                    >
+                                                        <td className="px-3 py-3">
+                                                            <span className={`font-mono text-xs font-medium ${
+                                                                isDebit ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                                                            }`}>
+                                                                {txn.reference}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-3 py-3">
+                                                            <div>
+                                                                <p className="font-medium text-slate-900 dark:text-white text-xs">{txn.party}</p>
+                                                                <p className="text-xs text-slate-500 dark:text-gray-400">{txn.area}</p>
+                                                                {txn.description && (
+                                                                    <p className="text-xs text-slate-400 dark:text-gray-500 italic">{txn.description}</p>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-3 py-3 text-slate-500 dark:text-gray-400">
+                                                            {new Date(txn.date).toLocaleDateString()}
+                                                        </td>
+                                                        <td className="px-3 py-3">
+                                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                                                txn.type === 'sale' 
+                                                                    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
+                                                                    : txn.type === 'expense'
+                                                                    ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
+                                                                    : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300'
+                                                            }`}>
+                                                                {txn.type === 'sale' ? txn.payment_type : txn.type}
+                                                            </span>
+                                                        </td>
+                                                        <td className={`px-3 py-3 text-right font-mono ${
+                                                            isDebit ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                                                        }`}>
+                                                            {isDebit ? '+' : '-'}₹{parseFloat(txn.amount).toFixed(2)}
+                                                        </td>
+                                                        <td className="px-3 py-3 text-right font-mono text-green-600 dark:text-green-400">
+                                                            ₹{parseFloat(txn.amount_paid).toFixed(2)}
+                                                        </td>
+                                                        <td className="px-3 py-3 text-right font-mono text-red-600 dark:text-red-400">
+                                                            ₹{parseFloat(txn.balance_due).toFixed(2)}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>
@@ -551,30 +572,38 @@ const Sales = () => {
                                 <table className="w-full text-sm">
                                     <thead>
                                         <tr className="bg-slate-100">
-                                            <th className="px-4 py-2 text-left font-semibold text-slate-900">Invoice #</th>
-                                            <th className="px-4 py-2 text-left font-semibold text-slate-900">Distributor</th>
+                                            <th className="px-4 py-2 text-left font-semibold text-slate-900">Reference</th>
+                                            <th className="px-4 py-2 text-left font-semibold text-slate-900">Party/Description</th>
                                             <th className="px-4 py-2 text-left font-semibold text-slate-900">Type</th>
-                                            <th className="px-4 py-2 text-right font-semibold text-slate-900">Total</th>
-                                            <th className="px-4 py-2 text-right font-semibold text-slate-900">Paid</th>
-                                            <th className="px-4 py-2 text-right font-semibold text-slate-900">Due</th>
+                                            <th className="px-4 py-2 text-right font-semibold text-slate-900">Amount</th>
                                             <th className="px-4 py-2 text-right font-semibold text-slate-900">Date</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {(reportData?.transactions || []).map((txn) => (
-                                            <tr key={txn.id} className="border-b border-slate-200">
-                                                <td className="px-4 py-2 text-slate-900">{txn.invoice_number}</td>
-                                                <td className="px-4 py-2 text-slate-900">
-                                                    {txn.distributor_name}<br />
-                                                    <span className="text-xs text-slate-600">{txn.distributor_area}</span>
-                                                </td>
-                                                <td className="px-4 py-2 text-slate-900">{txn.payment_type}</td>
-                                                <td className="px-4 py-2 text-right text-slate-900">{formatCurrency(txn.total_amount)}</td>
-                                                <td className="px-4 py-2 text-right text-green-600">₹{parseFloat(txn.amount_paid || 0).toFixed(2)}</td>
-                                                <td className="px-4 py-2 text-right text-red-600">₹{parseFloat(txn.balance_due || 0).toFixed(2)}</td>
-                                                <td className="px-4 py-2 text-right text-slate-900">{new Date(txn.created_at).toLocaleDateString()}</td>
-                                            </tr>
-                                        ))}
+                                        {(reportData?.transactions || []).map((txn) => {
+                                            const isDebit = txn.type === 'sale';
+                                            return (
+                                                <tr key={txn.id} className="border-b border-slate-200">
+                                                    <td className="px-4 py-2 text-slate-900">{txn.reference}</td>
+                                                    <td className="px-4 py-2 text-slate-900">
+                                                        <strong>{txn.party}</strong>
+                                                        {txn.description && (
+                                                            <>
+                                                                <br />
+                                                                <span className="text-xs text-slate-600">{txn.description}</span>
+                                                            </>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-2 text-slate-900 capitalize">{txn.type}</td>
+                                                    <td className={`px-4 py-2 text-right font-mono ${
+                                                        isDebit ? 'text-green-600' : 'text-red-600'
+                                                    }`}>
+                                                        {isDebit ? '+' : '-'}₹{parseFloat(txn.amount || 0).toFixed(2)}
+                                                    </td>
+                                                    <td className="px-4 py-2 text-right text-slate-900">{new Date(txn.date).toLocaleDateString()}</td>
+                                                </tr>
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                             </div>
