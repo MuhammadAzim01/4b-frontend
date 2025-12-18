@@ -1,0 +1,458 @@
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { fetchWithAuth } from '../utils/fetchApis';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
+
+/**
+ * Sales & Reports Page
+ * 
+ * Features:
+ * - Displays sales metrics (revenue, units sold, net profit, avg order value)
+ * - Shows top products and recent transactions
+ * - Supports date filtering (month, year, all time, custom range)
+ * - Implements smart caching (5-minute TTL) to reduce API calls
+ * - Exports comprehensive CSV reports
+ * 
+ * API Endpoints:
+ * - GET /sales-stats/metrics/ - Returns sales metrics
+ * - GET /sales-stats/top-products/ - Returns array of top products
+ * - GET /sales-stats/transactions/ - Returns paginated transactions
+ * - GET /sales-stats/report/ - Returns full report for export
+ */
+const Sales = () => {
+    const [isLoading, setIsLoading] = useState(true);
+    const [isExporting, setIsExporting] = useState(false);
+
+    // Filters
+    const [dateFilter, setDateFilter] = useState('month'); // 'month', 'year', 'custom', 'all'
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+
+    // Data States
+    const [metrics, setMetrics] = useState({
+        total_revenue: 0,
+        units_sold: 0,
+        net_profit: 0,
+        avg_order_value: 0,
+        period_start: '',
+        period_end: ''
+    });
+    const [topProducts, setTopProducts] = useState([]);
+    const [transactions, setTransactions] = useState([]);
+    const [transactionPage, setTransactionPage] = useState(1);
+    const [transactionPagination, setTransactionPagination] = useState({
+        total_pages: 1,
+        count: 0,
+        current_page: 1
+    });
+
+    console.log('Sales Page Rendered', metrics, "testing", topProducts, "transactions", transactions);
+    // Cache for API responses (stores data for 5 minutes)
+    const cacheRef = useRef({});
+    const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+    // Generate cache key
+    const getCacheKey = (type, params) => {
+        return `${type}_${JSON.stringify(params)}`;
+    };
+
+    // Clear cache manually
+    const clearCache = () => {
+        cacheRef.current = {};
+        fetchData();
+    };
+
+    // Check if cache is valid
+    const isCacheValid = (cacheEntry) => {
+        if (!cacheEntry) return false;
+        return Date.now() - cacheEntry.timestamp < CACHE_DURATION;
+    };
+
+    // Fetch data based on filters
+    useEffect(() => {
+        fetchData();
+    }, [dateFilter, startDate, endDate, transactionPage]);
+
+    const fetchData = async () => {
+        setIsLoading(true);
+        try {
+            // Build query params
+            const params = new URLSearchParams({ period: dateFilter });
+            if (dateFilter === 'custom' && startDate && endDate) {
+                params.append('start_date', startDate);
+                params.append('end_date', endDate);
+            }
+
+            const paramsString = params.toString();
+
+            // Fetch all three endpoints in parallel
+            const [metricsRes, topProductsRes, transactionsRes] = await Promise.all([
+                fetchWithAuth(`sales-stats/metrics/?${paramsString}`),
+                fetchWithAuth(`sales-stats/top-products/?${paramsString}&limit=10`),
+                fetchWithAuth(`sales-stats/transactions/?${paramsString}&page=${transactionPage}&page_size=10`)
+            ]);
+
+            // Set states with proper data structure
+            setMetrics(metricsRes || {});
+            setTopProducts(Array.isArray(topProductsRes) ? topProductsRes : []);
+            setTransactions(transactionsRes?.results || []);
+            setTransactionPagination({
+                total_pages: transactionsRes?.total_pages || 1,
+                count: transactionsRes?.count || 0,
+                current_page: transactionsRes?.current_page || 1
+            });
+        } catch (error) {
+            console.error('Failed to fetch sales data:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleExportReport = async () => {
+        setIsExporting(true);
+        try {
+            const params = new URLSearchParams({ period: dateFilter });
+            if (dateFilter === 'custom' && startDate && endDate) {
+                params.append('start_date', startDate);
+                params.append('end_date', endDate);
+            }
+
+            const reportData = await fetchWithAuth(`sales-stats/report/?${params.toString()}`);
+            
+            // Convert to CSV
+            const csv = generateCSV(reportData);
+            downloadCSV(csv, `sales_report_${new Date().toISOString().split('T')[0]}.csv`);
+        } catch (error) {
+            console.error('Failed to export report:', error);
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    const generateCSV = (data) => {
+        let csv = 'Sales Report\\n\\n';
+        
+        // Metrics Section
+        csv += 'METRICS\\n';
+        csv += `Period Start,${data.metrics.period_start}\\n`;
+        csv += `Period End,${data.metrics.period_end}\\n`;
+        csv += `Total Revenue,${data.metrics.total_revenue}\\n`;
+        csv += `Units Sold,${data.metrics.units_sold}\\n`;
+        csv += `Net Profit,${data.metrics.net_profit}\\n`;
+        csv += `Avg Order Value,${data.metrics.avg_order_value}\\n`;
+        csv += `Period Expenses,${data.period_expenses}\\n`;
+        csv += `Inventory Purchases,${data.inventory_purchases}\\n\\n`;
+        
+        // Top Products Section
+        csv += 'TOP PRODUCTS\\n';
+        csv += 'Product Name,Quantity Sold,Revenue,Order Count\\n';
+        data.top_products.forEach(product => {
+            csv += `${product.product_name},${product.total_quantity_sold},${product.total_revenue},${product.order_count}\\n`;
+        });
+        csv += '\\n';
+        
+        // Transactions Section
+        csv += 'TRANSACTIONS\\n';
+        csv += 'Invoice Number,Distributor,Area,Amount,Date\\n';
+        data.transactions.forEach(txn => {
+            csv += `${txn.invoice_number},${txn.distributor_name},${txn.distributor_area},${txn.total_amount},${new Date(txn.created_at)?.toLocaleDateString()}\\n`;
+        });
+        
+        return csv;
+    };
+
+    const downloadCSV = (csv, filename) => {
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        if (link.download !== undefined) {
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    };
+
+    const formatCurrency = (amount) => {
+        return new Intl.NumberFormat('en-IN', {
+            style: 'currency',
+            currency: 'INR',
+            maximumFractionDigits: 0
+        }).format(amount || 0);
+    };
+
+    const getRangeText = () => {
+        if (dateFilter === 'custom' && startDate && endDate) {
+            return `${new Date(startDate)?.toLocaleDateString()} to ${new Date(endDate)?.toLocaleDateString()}`;
+        }
+        if (dateFilter === 'month') return 'Current Month';
+        if (dateFilter === 'year') return 'Current Year';
+        return 'All Time';
+    };
+
+    if (isLoading && transactions.length === 0) {
+        return (
+            <div className="flex-1 flex items-center justify-center h-full">
+                <LoadingSpinner size="lg" />
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex-1 overflow-y-auto p-8 bg-slate-50 dark:bg-background">
+            <div className="max-w-7xl mx-auto">
+                {/* Header */}
+                <div className="flex flex-wrap justify-between items-end gap-4 mb-8">
+                    <div className="flex flex-col gap-2">
+                        <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Sales & Reports</h1>
+                        <p className="text-slate-500 dark:text-gray-400">Track sales performance and export comprehensive reports.</p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3">
+                        {/* Date Filter Buttons */}
+                        <div className="flex bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-1">
+                            {['month', 'year', 'all', 'custom'].map((f) => (
+                                <button
+                                    key={f}
+                                    onClick={() => setDateFilter(f)}
+                                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all capitalize ${
+                                        dateFilter === f
+                                            ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'
+                                    }`}
+                                >
+                                    {f === 'all' ? 'All Time' : f}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Custom Date Range */}
+                        {dateFilter === 'custom' && (
+                            <div className="flex items-center gap-2 bg-white dark:bg-slate-800 p-1 rounded-lg border border-slate-200 dark:border-slate-700">
+                                <input
+                                    type="date"
+                                    value={startDate}
+                                    onChange={(e) => setStartDate(e.target.value)}
+                                    className="text-xs border-none bg-transparent outline-none text-slate-700 dark:text-white"
+                                />
+                                <span className="text-slate-300">-</span>
+                                <input
+                                    type="date"
+                                    value={endDate}
+                                    onChange={(e) => setEndDate(e.target.value)}
+                                    className="text-xs border-none bg-transparent outline-none text-slate-700 dark:text-white"
+                                />
+                            </div>
+                        )}
+
+                        {/* Export Button */}
+                        <button
+                            onClick={handleExportReport}
+                            disabled={isExporting}
+                            className="flex items-center gap-2 px-4 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-lg font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-50"
+                        >
+                            <span className="material-symbols-outlined text-lg">
+                                {isExporting ? 'hourglass_empty' : 'download'}
+                            </span>
+                            {isExporting ? 'Exporting...' : 'Export Report'}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Metrics Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    {/* Total Revenue */}
+                    <div className="bg-white dark:bg-background-dark p-6 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700">
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="p-2 bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 rounded-lg">
+                                <span className="material-symbols-outlined">payments</span>
+                            </div>
+                            <h3 className="text-sm font-semibold text-slate-500 dark:text-gray-400">Total Revenue</h3>
+                        </div>
+                        <p className="text-2xl font-bold text-slate-900 dark:text-white">
+                            {formatCurrency(metrics.total_revenue)}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-1">{getRangeText()}</p>
+                    </div>
+
+                    {/* Units Sold */}
+                    <div className="bg-white dark:bg-background-dark p-6 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700">
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="p-2 bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 rounded-lg">
+                                <span className="material-symbols-outlined">shopping_cart</span>
+                            </div>
+                            <h3 className="text-sm font-semibold text-slate-500 dark:text-gray-400">Units Sold</h3>
+                        </div>
+                        <p className="text-2xl font-bold text-slate-900 dark:text-white">
+                            {parseInt(metrics.units_sold || 0).toLocaleString()}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-1">{getRangeText()}</p>
+                    </div>
+
+                    {/* Net Profit */}
+                    <div className="bg-white dark:bg-background-dark p-6 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700">
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className={`p-2 rounded-lg ${
+                                metrics.net_profit >= 0 
+                                    ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' 
+                                    : 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
+                            }`}>
+                                <span className="material-symbols-outlined">account_balance_wallet</span>
+                            </div>
+                            <h3 className="text-sm font-semibold text-slate-500 dark:text-gray-400">Net Profit</h3>
+                        </div>
+                        <p className={`text-2xl font-bold ${
+                            metrics.net_profit >= 0 ? 'text-slate-900 dark:text-white' : 'text-red-500'
+                        }`}>
+                            {formatCurrency(metrics.net_profit)}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-1">{getRangeText()}</p>
+                    </div>
+
+                    {/* Avg Order Value */}
+                    <div className="bg-white dark:bg-background-dark p-6 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700">
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="p-2 bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400 rounded-lg">
+                                <span className="material-symbols-outlined">trending_up</span>
+                            </div>
+                            <h3 className="text-sm font-semibold text-slate-500 dark:text-gray-400">Avg Order Value</h3>
+                        </div>
+                        <p className="text-2xl font-bold text-slate-900 dark:text-white">
+                            {formatCurrency(metrics.avg_order_value)}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-1">{getRangeText()}</p>
+                    </div>
+                </div>
+
+                {/* Two Column Layout */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Top Products */}
+                    <div className="bg-white dark:bg-background-dark p-6 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700">
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                            <span className="material-symbols-outlined text-blue-600">star</span>
+                            Top Products
+                        </h3>
+                        
+                        {topProducts.length === 0 ? (
+                            <p className="text-slate-500 text-sm text-center py-8">No products sold in this period</p>
+                        ) : (
+                            <div className="space-y-3 max-h-96 overflow-y-auto">
+                                {topProducts.map((product, index) => (
+                                    <div 
+                                        key={product.product_id}
+                                        className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 flex items-center justify-center bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full font-bold text-sm">
+                                                {index + 1}
+                                            </div>
+                                            <div>
+                                                <p className="font-semibold text-slate-900 dark:text-white">
+                                                    {product.product_name}
+                                                </p>
+                                                <p className="text-xs text-slate-500">
+                                                    {product.order_count} orders
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="font-bold text-slate-900 dark:text-white">
+                                                {parseFloat(product.total_quantity_sold).toFixed(0)} units
+                                            </p>
+                                            <p className="text-xs text-slate-500">
+                                                {formatCurrency(product.total_revenue)}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Recent Transactions */}
+                    <div className="bg-white dark:bg-background-dark p-6 rounded-xl shadow-sm border border-slate-200 dark:border-gray-700">
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                            <span className="material-symbols-outlined text-green-600">receipt_long</span>
+                            Recent Transactions
+                        </h3>
+                        
+                        {transactions.length === 0 ? (
+                            <p className="text-slate-500 text-sm text-center py-8">No transactions in this period</p>
+                        ) : (
+                            <>
+                                <div className="space-y-3 max-h-96 overflow-y-auto">
+                                    {transactions.map((txn) => (
+                                        <div 
+                                            key={txn.id}
+                                            className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700"
+                                        >
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div>
+                                                    <p className="font-semibold text-slate-900 dark:text-white">
+                                                        {txn.distributor_name}
+                                                    </p>
+                                                    <p className="text-xs text-slate-500">
+                                                        {txn.distributor_area} • {txn.invoice_number}
+                                                    </p>
+                                                </div>
+                                                <p className="font-bold text-green-600">
+                                                    {formatCurrency(txn.total_amount)}
+                                                </p>
+                                            </div>
+                                            
+                                            <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                                                <p className="text-xs text-slate-500 mb-1">Items:</p>
+                                                {txn.items.slice(0, 2).map((item, idx) => (
+                                                    <p key={idx} className="text-xs text-slate-600 dark:text-slate-400">
+                                                        • {item.product_name} ({item.quantity} × {formatCurrency(item.unit_price)})
+                                                    </p>
+                                                ))}
+                                                {txn.items.length > 2 && (
+                                                    <p className="text-xs text-slate-500 italic">
+                                                        +{txn.items.length - 2} more items
+                                                    </p>
+                                                )}
+                                            </div>
+                                            
+                                            <p className="text-xs text-slate-400 mt-2">
+                                                {new Date(txn.created_at)?.toLocaleString()}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                                
+                                {/* Pagination */}
+                                {transactionPagination.total_pages > 1 && (
+                                    <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                                        <button
+                                            onClick={() => setTransactionPage(prev => Math.max(1, prev - 1))}
+                                            disabled={transactionPage === 1}
+                                            className="px-3 py-1 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            Previous
+                                        </button>
+                                        <span className="text-sm text-slate-600 dark:text-slate-400">
+                                            Page {transactionPage} of {transactionPagination.total_pages}
+                                        </span>
+                                        <button
+                                            onClick={() => setTransactionPage(prev => Math.min(transactionPagination.total_pages, prev + 1))}
+                                            disabled={transactionPage === transactionPagination.total_pages}
+                                            className="px-3 py-1 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            Next
+                                        </button>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default Sales;
+
+
