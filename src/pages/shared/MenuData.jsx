@@ -6,6 +6,7 @@ export const menuItems = {
         { icon: "receipt_long", url: "/admin/sales", name: "Sales and Report" },
         { icon: "monitoring", url: "/admin/financials", name: "Financials" },
         { icon: "payments", url: "/admin/expenses", name: "Expenses" },
+        { icon: "account_balance_wallet", url: "/admin/balance", name: "Balance" },
         { icon: "precision_manufacturing", url: "/admin/production", name: "Production" },
         { icon: "warehouse", url: "/admin/warehouse", name: "Warehouse" },
         { icon: "badge", url: "/admin/employee", name: "Employee & HR" },
