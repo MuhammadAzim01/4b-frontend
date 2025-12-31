@@ -23,7 +23,6 @@ export default function AdminRoutes() {
                     <Route path="inventory" element={<Inventory />} />
                     <Route path="distributors" element={<Distributors />} />
                     <Route path="sales" element={<Sales />} />
-                    <Route path="financials" element={<Financials />} />
                     <Route path="expenses" element={<Expenses />} />
                     <Route path="balance" element={<Balance />} />
                     <Route path="production" element={<Production />} />
