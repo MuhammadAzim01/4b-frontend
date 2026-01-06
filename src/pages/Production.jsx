@@ -173,7 +173,7 @@ const Production = () => {
                                         </div>
 
                                         <div className="text-xs text-slate-600 dark:text-slate-400 mb-3">
-                                            <span className="font-semibold">Total Cost:</span> ₹{parseFloat(run.total_cost).toFixed(2)}
+                                            <span className="font-semibold">Total Cost:</span> Rs. {parseFloat(run.total_cost).toFixed(2)}
                                         </div>
 
                                         <button

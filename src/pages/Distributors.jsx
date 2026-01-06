@@ -219,7 +219,7 @@ const Distributors = () => {
                                             <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-sm">{distributor.area}</td>
                                             <td className={`px-4 py-3 text-right text-sm font-mono ${parseFloat(distributor.balance) < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'
                                                 }`}>
-                                                ₹{parseFloat(distributor.balance).toFixed(2)}
+                                                Rs. {parseFloat(distributor.balance).toFixed(2)}
                                             </td>
                                         </tr>
                                     ))}
@@ -275,7 +275,7 @@ const Distributors = () => {
                                         <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Current Balance</p>
                                         <p className={`text-3xl font-bold ${parseFloat(selectedDistributor.balance) < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'
                                             }`}>
-                                            ₹{Math.abs(parseFloat(selectedDistributor.balance)).toFixed(2)}
+                                            Rs. {Math.abs(parseFloat(selectedDistributor.balance)).toFixed(2)}
                                         </p>
                                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                                             {parseFloat(selectedDistributor.balance) < 0 ? 'They Owe Us' : 'We Owe Them'}
@@ -391,9 +391,9 @@ const Distributors = () => {
                                                                         {invoice.transaction_type === 'sale' ? 'Sale' : 'Payment'} - {invoice.payment_type}
                                                                     </span>
                                                                 </td>
-                                                                <td className="px-4 py-3 text-right font-mono text-slate-900 dark:text-white">₹{parseFloat(invoice.total_amount).toFixed(2)}</td>
-                                                                <td className="px-4 py-3 text-right font-mono text-green-600 dark:text-green-400">₹{parseFloat(invoice.amount_paid).toFixed(2)}</td>
-                                                                <td className="px-4 py-3 text-right font-mono text-red-600 dark:text-red-400">₹{parseFloat(invoice.balance_due).toFixed(2)}</td>
+                                                                <td className="px-4 py-3 text-right font-mono text-slate-900 dark:text-white">Rs. {parseFloat(invoice.total_amount).toFixed(2)}</td>
+                                                                <td className="px-4 py-3 text-right font-mono text-green-600 dark:text-green-400">Rs. {parseFloat(invoice.amount_paid).toFixed(2)}</td>
+                                                                <td className="px-4 py-3 text-right font-mono text-red-600 dark:text-red-400">Rs. {parseFloat(invoice.balance_due).toFixed(2)}</td>
                                                             </tr>
                                                         ))
                                                     )}

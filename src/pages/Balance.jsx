@@ -283,7 +283,7 @@ const Balance = () => {
                                     Description
                                 </th>
                                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Amount
+                                    Amount (Rs.)
                                 </th>
                                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                                     Balance After
@@ -376,7 +376,7 @@ const Balance = () => {
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Amount (₹)
+                                    Amount (Rs.)
                                 </label>
                                 <input
                                     type="number"

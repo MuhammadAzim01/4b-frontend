@@ -1,9 +1,17 @@
 import React from 'react';
+import { generateDistributorInvoiceHtml } from './DistributorInvoiceTemplate';
 
 const InvoiceDetailsModal = ({ isOpen, onClose, invoice }) => {
     if (!isOpen || !invoice) return null;
     invoice = invoice?.data || invoice;
     const isSale = invoice.transaction_type === 'sale';
+
+    const handlePrint = () => {
+        const htmlContent = generateDistributorInvoiceHtml(invoice);
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(htmlContent);
+        printWindow.document.close();
+    };
 
     return (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -78,8 +86,8 @@ const InvoiceDetailsModal = ({ isOpen, onClose, invoice }) => {
                                         <tr key={item.id} className="border-b border-slate-100 dark:border-slate-700/50">
                                             <td className="py-2 text-slate-900 dark:text-white">{item.product_name}</td>
                                             <td className="py-2 text-right font-mono text-slate-700 dark:text-slate-300">{item.quantity}</td>
-                                            <td className="py-2 text-right font-mono text-slate-700 dark:text-slate-300">₹{parseFloat(item.unit_price).toFixed(2)}</td>
-                                            <td className="py-2 text-right font-mono font-semibold text-slate-900 dark:text-white">₹{parseFloat(item.total_price).toFixed(2)}</td>
+                                            <td className="py-2 text-right font-mono text-slate-700 dark:text-slate-300">Rs. {parseFloat(item.unit_price).toFixed(2)}</td>
+                                            <td className="py-2 text-right font-mono font-semibold text-slate-900 dark:text-white">Rs. {parseFloat(item.total_price).toFixed(2)}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -92,11 +100,11 @@ const InvoiceDetailsModal = ({ isOpen, onClose, invoice }) => {
                         <div className="space-y-2">
                             <div className="flex justify-between items-center">
                                 <span className="text-sm text-slate-700 dark:text-slate-300">Total Amount</span>
-                                <span className="text-sm font-mono font-bold text-slate-900 dark:text-white">₹{parseFloat(invoice.total_amount).toFixed(2)}</span>
+                                <span className="text-sm font-mono font-bold text-slate-900 dark:text-white">Rs. {parseFloat(invoice.total_amount).toFixed(2)}</span>
                             </div>
                             <div className="flex justify-between items-center">
                                 <span className="text-sm text-slate-700 dark:text-slate-300">Initial Payment</span>
-                                <span className="text-sm font-mono font-semibold text-green-600 dark:text-green-400">₹{parseFloat(invoice.amount_paid).toFixed(2)}</span>
+                                <span className="text-sm font-mono font-semibold text-green-600 dark:text-green-400">Rs. {parseFloat(invoice.amount_paid).toFixed(2)}</span>
                             </div>
                             {isSale && invoice.payment_invoices && invoice.payment_invoices.length > 0 && (
                                 <div className="pt-2 border-t border-blue-200 dark:border-blue-800">
@@ -106,7 +114,7 @@ const InvoiceDetailsModal = ({ isOpen, onClose, invoice }) => {
                                             <span className="font-mono text-xs text-slate-500 dark:text-slate-400">
                                                 {payment.invoice_number} - {new Date(payment.created_at).toLocaleDateString()}
                                             </span>
-                                            <span className="font-mono text-sm font-semibold text-green-600 dark:text-green-400">₹{parseFloat(payment.amount_paid).toFixed(2)}</span>
+                                            <span className="font-mono text-sm font-semibold text-green-600 dark:text-green-400">Rs. {parseFloat(payment.amount_paid).toFixed(2)}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -118,7 +126,7 @@ const InvoiceDetailsModal = ({ isOpen, onClose, invoice }) => {
                                         ? 'text-red-600 dark:text-red-400' 
                                         : 'text-green-600 dark:text-green-400'
                                 }`}>
-                                    ₹{parseFloat(invoice.balance_due).toFixed(2)}
+                                    Rs. {parseFloat(invoice.balance_due).toFixed(2)}
                                 </span>
                             </div>
                         </div>
@@ -133,7 +141,14 @@ const InvoiceDetailsModal = ({ isOpen, onClose, invoice }) => {
                     )}
                 </div>
 
-                <div className="p-6 border-t border-slate-200 dark:border-slate-800 flex justify-end">
+                <div className="p-6 border-t border-slate-200 dark:border-slate-800 flex justify-between">
+                    <button
+                        onClick={handlePrint}
+                        className="px-4 py-2 text-sm font-semibold text-white bg-eva-blue rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                    >
+                        <span className="material-symbols-outlined text-base">print</span>
+                        Print Invoice
+                    </button>
                     <button
                         onClick={onClose}
                         className="px-4 py-2 text-sm font-semibold text-slate-700 bg-gray-100 rounded-lg hover:bg-gray-200 dark:bg-gray-800 dark:text-slate-300 dark:hover:bg-gray-700 transition-colors"

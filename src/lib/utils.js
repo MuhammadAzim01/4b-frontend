@@ -6,7 +6,7 @@ export function cn(...inputs) {
 }
 
 export function formatCurrency(val) {
-  return new Intl.NumberFormat('en-IN', {
+  return new Intl.NumberFormat('en-PK', {
     style: 'currency',
     currency: 'PKR',
     maximumFractionDigits: 0
@@ -14,7 +14,7 @@ export function formatCurrency(val) {
 }
 
 export function formatDate(dateString) {
-  return new Date(dateString).toLocaleDateString('en-IN', {
+  return new Date(dateString).toLocaleDateString('en-PK', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',

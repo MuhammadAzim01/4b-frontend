@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import { toast } from 'sonner';
 import { useFetchQuery } from '../hooks/useFetchQuery';
 import { fetchWithAuth } from '../utils/fetchApis';
 
@@ -49,9 +50,15 @@ const EndProductionModal = ({ isOpen, onClose, onEnd, runData }) => {
                 const maxQty = getMaxQuantity(item.materialId);
 
                 if (value !== '' && (parseFloat(value) < 0 || parseFloat(value) > maxQty)) {
+                    if (parseFloat(value) < 0) {
+                        toast.error('Waste quantity cannot be negative');
+                    } else {
+                        toast.error(`Waste quantity cannot exceed ${maxQty} (quantity used)`);
+                    }
                     return;
                 }
             } else if (value !== '' && parseFloat(value) < 0) {
+                toast.error('Waste quantity cannot be negative');
                 return;
             }
         }
@@ -65,9 +72,15 @@ const EndProductionModal = ({ isOpen, onClose, onEnd, runData }) => {
                 const maxQty = getMaxQuantity(item.materialId);
 
                 if (value !== '' && (parseFloat(value) < 0 || parseFloat(value) > maxQty)) {
+                    if (parseFloat(value) < 0) {
+                        toast.error('Returned quantity cannot be negative');
+                    } else {
+                        toast.error(`Returned quantity cannot exceed ${maxQty} (quantity used)`);
+                    }
                     return;
                 }
             } else if (value !== '' && parseFloat(value) < 0) {
+                toast.error('Returned quantity cannot be negative');
                 return;
             }
         }
@@ -107,6 +120,7 @@ const EndProductionModal = ({ isOpen, onClose, onEnd, runData }) => {
     const handleOutputQuantityChange = (value) => {
         // Prevent negative values for output quantity
         if (value !== '' && parseFloat(value) < 0) {
+            toast.error('Output quantity cannot be negative');
             return;
         }
         setOutputQuantity(value);

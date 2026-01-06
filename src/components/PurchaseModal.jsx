@@ -190,7 +190,7 @@ const PurchaseModal = ({ isOpen, onClose, role, onOpenCreateModal }) => {
                         </div>
                         {role === 'admin' && (
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Unit Cost (₹)</label>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Unit Cost (Rs.)</label>
                                 <input
                                     type="number"
                                     name="unitValue"
@@ -208,7 +208,7 @@ const PurchaseModal = ({ isOpen, onClose, role, onOpenCreateModal }) => {
                         <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
                             <div className="flex justify-between items-center text-sm">
                                 <span className="text-slate-500 dark:text-slate-400">Total Cost:</span>
-                                <span className="font-bold text-slate-900 dark:text-white">₹{totalCost}</span>
+                                <span className="font-bold text-slate-900 dark:text-white">Rs. {totalCost}</span>
                             </div>
                         </div>
                     )}

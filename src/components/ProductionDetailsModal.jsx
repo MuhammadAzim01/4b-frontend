@@ -1,11 +1,19 @@
 
 import React from 'react';
 import { getAuthStatus } from '../utils/auth';
+import { generateProductionInvoiceHtml } from './ProductionInvoiceTemplate';
 
 const ProductionDetailsModal = ({ isOpen, onClose, run }) => {
     const wastage = run?.raw_materials?.filter(m => m.quantity_wasted > 0);
     const returnedItems = run?.raw_materials?.filter(m => m.quantity_returned > 0);
     const { role } = getAuthStatus().user;
+
+    const handlePrint = () => {
+        const htmlContent = generateProductionInvoiceHtml(run);
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(htmlContent);
+        printWindow.document.close();
+    };
 
     if (!isOpen || !run) return null;
 
@@ -51,7 +59,7 @@ const ProductionDetailsModal = ({ isOpen, onClose, run }) => {
                                 <div className="flex items-center justify-between">
                                     <span className="text-sm text-slate-600 dark:text-slate-400">Total Cost</span>
                                     <span className="text-2xl font-black text-blue-600 dark:text-blue-400">
-                                        ${parseFloat(run.total_cost || 0).toFixed(2)}
+                                        Rs. {parseFloat(run.total_cost || 0).toFixed(2)}
                                     </span>
                                 </div>
                             </div>
@@ -173,7 +181,14 @@ const ProductionDetailsModal = ({ isOpen, onClose, run }) => {
                     </div>
                 </div>
 
-                <div className="p-6 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/20 rounded-b-xl flex justify-end">
+                <div className="p-6 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/20 rounded-b-xl flex justify-between">
+                    <button
+                        onClick={handlePrint}
+                        className="px-6 py-2.5 bg-eva-blue text-white font-bold rounded-lg hover:bg-blue-700 transition-colors shadow-sm flex items-center gap-2"
+                    >
+                        <span className="material-symbols-outlined text-lg">print</span>
+                        Print Invoice
+                    </button>
                     <button
                         onClick={onClose}
                         className="px-6 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-white font-bold rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm"

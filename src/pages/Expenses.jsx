@@ -138,6 +138,16 @@ const Expenses = () => {
         e.preventDefault();
         if (!amount || !description || !category) return;
 
+        // Get category name for confirmation message
+        const selectedCategory = categories.find(c => c.id === parseInt(category));
+        const categoryName = selectedCategory?.name || 'Unknown';
+
+        // Ask for confirmation
+        const confirmMessage = `Add expense of Rs. ${parseFloat(amount).toFixed(2)} for ${categoryName}?\n\nDescription: ${description}`;
+        if (!confirm(confirmMessage)) {
+            return;
+        }
+
         try {
             const payload = {
                 amount: parseFloat(amount),
@@ -233,9 +243,10 @@ const Expenses = () => {
     };
 
     const formatCurrency = (val) => {
-        return new Intl.NumberFormat('en-IN', {
+        return new Intl.NumberFormat('en-PK', {
             style: 'currency',
-            currency: 'INR'
+            currency: 'PKR',
+            maximumFractionDigits: 0
         }).format(val);
     };
 
@@ -285,9 +296,9 @@ const Expenses = () => {
 
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Amount (₹)</label>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Amount (Rs.)</label>
                                 <div className="relative">
-                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">₹</span>
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">Rs.</span>
                                     <input
                                         type="number"
                                         step="0.01"
