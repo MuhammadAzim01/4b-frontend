@@ -152,9 +152,9 @@ const Sales = () => {
     };
 
     const formatCurrency = (amount) => {
-        return new Intl.NumberFormat('en-IN', {
+        return new Intl.NumberFormat('en-PK', {
             style: 'currency',
-            currency: 'INR',
+            currency: 'PKR',
             maximumFractionDigits: 0
         }).format(parseFloat(amount) || 0);
     };
@@ -431,13 +431,13 @@ const Sales = () => {
                                                         <td className={`px-3 py-3 text-right font-mono ${
                                                             isDebit ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                                                         }`}>
-                                                            {isDebit ? '+' : '-'}₹{parseFloat(txn.amount).toFixed(2)}
+                                                            {isDebit ? '+' : '-'}Rs. {parseFloat(txn.amount).toFixed(2)}
                                                         </td>
                                                         <td className="px-3 py-3 text-right font-mono text-green-600 dark:text-green-400">
-                                                            ₹{parseFloat(txn.amount_paid).toFixed(2)}
+                                                            Rs. {parseFloat(txn.amount_paid).toFixed(2)}
                                                         </td>
                                                         <td className="px-3 py-3 text-right font-mono text-red-600 dark:text-red-400">
-                                                            ₹{parseFloat(txn.balance_due).toFixed(2)}
+                                                            Rs. {parseFloat(txn.balance_due).toFixed(2)}
                                                         </td>
                                                     </tr>
                                                 );
@@ -598,7 +598,7 @@ const Sales = () => {
                                                     <td className={`px-4 py-2 text-right font-mono ${
                                                         isDebit ? 'text-green-600' : 'text-red-600'
                                                     }`}>
-                                                        {isDebit ? '+' : '-'}₹{parseFloat(txn.amount || 0).toFixed(2)}
+                                                        {isDebit ? '+' : '-'}Rs. {parseFloat(txn.amount || 0).toFixed(2)}
                                                     </td>
                                                     <td className="px-4 py-2 text-right text-slate-900">{new Date(txn.date).toLocaleDateString()}</td>
                                                 </tr>

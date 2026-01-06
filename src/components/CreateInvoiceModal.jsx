@@ -178,7 +178,7 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                                 </div>
                                 {paymentType === 'debit' && distributor?.balance > 0 && (
                                     <p className="mt-2 text-xs text-green-600 dark:text-green-400">
-                                        ℹ️ Available credit (₹{distributor.balance}) will be used first
+                                        ℹ️ Available credit (Rs. {distributor.balance}) will be used first
                                     </p>
                                 )}
                             </div>
@@ -247,7 +247,7 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                                     <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Total Amount:</span>
                                     {/* Show integer if possible, else 2 decimals */}
                                     <span className="text-lg font-bold text-eva-blue">
-                                        ₹{getTotalAmount() % 1 === 0 ? getTotalAmount() : getTotalAmount().toFixed(2)}
+                                        Rs. {getTotalAmount() % 1 === 0 ? getTotalAmount() : getTotalAmount().toFixed(2)}
                                     </span>
                                 </div>
                             </div>
@@ -259,12 +259,20 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                                         type="number"
                                         placeholder="0"
                                         min="0"
-                                        step="0.01"
+                                        step="1"
                                         value={amountPaid}
                                         onChange={(e) => {
                                             const val = e.target.value;
                                             if (val === '' || parseFloat(val) >= 0) {
                                                 setAmountPaid(val);
+                                            }
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                                                e.preventDefault();
+                                                const currentVal = parseFloat(amountPaid) || 0;
+                                                const newVal = e.key === 'ArrowUp' ? currentVal + 1 : Math.max(0, currentVal - 1);
+                                                setAmountPaid(newVal.toString());
                                             }
                                         }}
                                         className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
@@ -314,7 +322,7 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                                                 <div className="flex-1">
                                                     <div className="flex justify-between">
                                                         <span className="font-mono text-sm text-slate-900 dark:text-white">{invoice.invoice_number}</span>
-                                                        <span className="text-sm font-semibold text-red-600 dark:text-red-400">₹{invoice.balance_due} due</span>
+                                                        <span className="text-sm font-semibold text-red-600 dark:text-red-400">Rs. {invoice.balance_due} due</span>
                                                     </div>
                                                     <p className="text-xs text-slate-500">{new Date(invoice.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                                                 </div>
@@ -327,7 +335,7 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                                     <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-200 dark:border-blue-800">
                                         <div className="flex justify-between text-sm">
                                             <span className="text-slate-700 dark:text-slate-300">Total Due:</span>
-                                            <span className="font-bold text-red-600 dark:text-red-400">₹{totalDue.toFixed(2)}</span>
+                                            <span className="font-bold text-red-600 dark:text-red-400">Rs. {totalDue.toFixed(2)}</span>
                                         </div>
                                     </div>
                                 )}
@@ -340,7 +348,7 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                                     type="number"
                                     placeholder="0"
                                     min="0"
-                                    step="0.01"
+                                    step="1"
                                     value={amountPaid}
                                     onChange={(e) => {
                                         const val = e.target.value;
@@ -348,13 +356,21 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                                             setAmountPaid(val);
                                         }
                                     }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                                            e.preventDefault();
+                                            const currentVal = parseFloat(amountPaid) || 0;
+                                            const newVal = e.key === 'ArrowUp' ? currentVal + 1 : Math.max(0, currentVal - 1);
+                                            setAmountPaid(newVal.toString());
+                                        }
+                                    }}
                                     className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
                                 />
                                 {amountPaid && selectedInvoices.length > 0 && (
                                     <p className={`mt-2 text-xs ${paymentDifference >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                                         {paymentDifference >= 0
-                                            ? `✓ Excess ₹${paymentDifference.toFixed(2)} will be added to credit balance`
-                                            : `⚠ Short by ₹${Math.abs(paymentDifference).toFixed(2)}`}
+                                            ? `✓ Excess Rs. ${paymentDifference.toFixed(2)} will be added to credit balance`
+                                            : `⚠ Short by Rs. ${Math.abs(paymentDifference).toFixed(2)}`}
                                     </p>
                                 )}
                             </div>

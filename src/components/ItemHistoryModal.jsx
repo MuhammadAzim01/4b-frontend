@@ -166,8 +166,8 @@ const ItemHistoryModal = ({ isOpen, onClose, itemName, role }) => {
                                             <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm italic">{entry.notes || '-'}</td>
                                             {role === 'admin' && (
                                                 <>
-                                                    <td className="px-4 py-3 text-slate-900 dark:text-white text-sm font-medium">₹{entry?.unit_cost}</td>
-                                                    <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">₹{(entry.quantity * entry.unit_cost).toFixed(2)}</td>
+                                                    <td className="px-4 py-3 text-slate-900 dark:text-white text-sm font-medium">Rs. {entry?.unit_cost}</td>
+                                                    <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">Rs. {(entry.quantity * entry.unit_cost).toFixed(2)}</td>
                                                 </>
                                             )}
                                         </tr>

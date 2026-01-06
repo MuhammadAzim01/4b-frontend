@@ -249,7 +249,7 @@ const Inventory = () => {
                                             {role === 'admin' && (
                                                 <>
                                                     {/* Unit Value Removed */}
-                                                    <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">₹{item?.available_price}</td>
+                                                    <td className="h-[72px] px-4 py-2 text-slate-500 dark:text-gray-400 text-sm">Rs. {item?.available_price}</td>
                                                 </>
                                             )}
                                             <td className="h-[72px] px-4 py-2 text-sm">
