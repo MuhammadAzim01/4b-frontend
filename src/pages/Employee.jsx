@@ -330,8 +330,17 @@ const Employee = () => {
                                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Base Salary *</label>
                                     <input
                                         type="number"
+                                        step="1"
                                         value={newEmployee.salary}
                                         onChange={(e) => setNewEmployee({ ...newEmployee, salary: e.target.value })}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                                                e.preventDefault();
+                                                const currentVal = parseFloat(newEmployee.salary) || 0;
+                                                const newVal = e.key === 'ArrowUp' ? currentVal + 1 : Math.max(0, currentVal - 1);
+                                                setNewEmployee({ ...newEmployee, salary: newVal.toString() });
+                                            }
+                                        }}
                                         className="w-full rounded-lg border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-primary focus:border-primary"
                                         placeholder="0.00"
                                     />

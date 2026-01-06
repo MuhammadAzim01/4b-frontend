@@ -259,12 +259,20 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                                         type="number"
                                         placeholder="0"
                                         min="0"
-                                        step="0.01"
+                                        step="1"
                                         value={amountPaid}
                                         onChange={(e) => {
                                             const val = e.target.value;
                                             if (val === '' || parseFloat(val) >= 0) {
                                                 setAmountPaid(val);
+                                            }
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                                                e.preventDefault();
+                                                const currentVal = parseFloat(amountPaid) || 0;
+                                                const newVal = e.key === 'ArrowUp' ? currentVal + 1 : Math.max(0, currentVal - 1);
+                                                setAmountPaid(newVal.toString());
                                             }
                                         }}
                                         className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
@@ -340,12 +348,20 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                                     type="number"
                                     placeholder="0"
                                     min="0"
-                                    step="0.01"
+                                    step="1"
                                     value={amountPaid}
                                     onChange={(e) => {
                                         const val = e.target.value;
                                         if (val === '' || parseFloat(val) >= 0) {
                                             setAmountPaid(val);
+                                        }
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                                            e.preventDefault();
+                                            const currentVal = parseFloat(amountPaid) || 0;
+                                            const newVal = e.key === 'ArrowUp' ? currentVal + 1 : Math.max(0, currentVal - 1);
+                                            setAmountPaid(newVal.toString());
                                         }
                                     }}
                                     className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"

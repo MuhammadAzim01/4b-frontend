@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { fetchWithAuth } from '../utils/fetchApis';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const DEFAULT_CATEGORIES = [
     { id: 'rent', name: 'Rent', icon: 'home' },
@@ -32,6 +33,10 @@ const Expenses = () => {
     const [isAddingCategory, setIsAddingCategory] = useState(false);
     const [newCategoryName, setNewCategoryName] = useState('');
     const [newCategoryIcon, setNewCategoryIcon] = useState('receipt');
+
+    // Confirmation dialog state
+    const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+    const [pendingExpense, setPendingExpense] = useState(null);
 
     // Load data on mount
     useEffect(() => {
@@ -142,18 +147,26 @@ const Expenses = () => {
         const selectedCategory = categories.find(c => c.id === parseInt(category));
         const categoryName = selectedCategory?.name || 'Unknown';
 
-        // Ask for confirmation
-        const confirmMessage = `Add expense of Rs. ${parseFloat(amount).toFixed(2)} for ${categoryName}?\n\nDescription: ${description}`;
-        if (!confirm(confirmMessage)) {
-            return;
-        }
+        // Set pending expense and show confirmation dialog
+        setPendingExpense({
+            amount: parseFloat(amount),
+            category: parseInt(category),
+            categoryName,
+            description,
+            date,
+        });
+        setShowConfirmDialog(true);
+    };
+
+    const handleConfirmExpense = async () => {
+        if (!pendingExpense) return;
 
         try {
             const payload = {
-                amount: parseFloat(amount),
-                category: parseInt(category),
-                description,
-                date,
+                amount: pendingExpense.amount,
+                category: pendingExpense.category,
+                description: pendingExpense.description,
+                date: pendingExpense.date,
             };
 
             const response = await fetchWithAuth('expenses/', {
@@ -168,6 +181,7 @@ const Expenses = () => {
             // Reset form
             setAmount('');
             setDescription('');
+            setPendingExpense(null);
         } catch (error) {
             console.error('Error adding expense:', error);
             toast.error(error.message || 'Failed to add expense');
@@ -301,13 +315,22 @@ const Expenses = () => {
                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">Rs.</span>
                                     <input
                                         type="number"
-                                        step="0.01"
+                                        step="1"
                                         required
                                         value={amount}
                                         onChange={(e) => {
                                             const val = e.target.value;
                                             if (val === '' || parseFloat(val) >= 0) {
                                                 setAmount(val);
+                                            }
+                                        }}
+                                        onKeyDown={(e) => {
+                                            // Allow decimals when typing but not with arrow keys
+                                            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                                                e.preventDefault();
+                                                const currentVal = parseFloat(amount) || 0;
+                                                const newVal = e.key === 'ArrowUp' ? currentVal + 1 : Math.max(0, currentVal - 1);
+                                                setAmount(newVal.toString());
                                             }
                                         }}
                                         className="w-full pl-8 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-eva-blue dark:text-white transition-all"
@@ -494,6 +517,21 @@ const Expenses = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Confirmation Dialog */}
+            <ConfirmDialog
+                isOpen={showConfirmDialog}
+                onClose={() => {
+                    setShowConfirmDialog(false);
+                    setPendingExpense(null);
+                }}
+                onConfirm={handleConfirmExpense}
+                title="Confirm Expense"
+                message={pendingExpense ? `Add expense of Rs. ${pendingExpense.amount.toFixed(2)} for ${pendingExpense.categoryName}?\n\nDescription: ${pendingExpense.description}` : ''}
+                confirmText="Add Expense"
+                cancelText="Cancel"
+                type="warning"
+            />
         </div>
     );
 };

@@ -380,10 +380,18 @@ const Balance = () => {
                                 </label>
                                 <input
                                     type="number"
-                                    step="0.01"
+                                    step="1"
                                     min="0.01"
                                     value={formData.amount}
                                     onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                                            e.preventDefault();
+                                            const currentVal = parseFloat(formData.amount) || 0;
+                                            const newVal = e.key === 'ArrowUp' ? currentVal + 1 : Math.max(0.01, currentVal - 1);
+                                            setFormData({ ...formData, amount: newVal.toString() });
+                                        }
+                                    }}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                     placeholder="Enter amount"
                                     required
