@@ -68,21 +68,16 @@ const Distributors = () => {
         onSuccessMessage: 'Invoice created successfully',
         onErrorMessage: 'Failed to create invoice',
         onSuccess: async () => {
-            // Refresh distributor list
-            await refetchDistributors();
-
-            // Update selected distributor with fresh data before refetching invoices
-            if (selectedDistributor?.id) {
-                try {
-                    const updatedDistributor = await fetchWithAuth(`distributors/${selectedDistributor.id}/`);
+            await Promise.all([refetchInvoices(), refetchDistributors()]);
+            // Update the selected distributor with fresh data
+            if (selectedDistributor) {
+                
+                const updatedDistributorsData = await fetchWithAuth(`distributors/?search=${searchQuery}`);
+                const updatedDistributor = updatedDistributorsData?.data.results?.find(d => d.id === selectedDistributor.id);
+                if (updatedDistributor) {
                     setSelectedDistributor(updatedDistributor);
-                    // Now refetch invoices after we've ensured selectedDistributor is updated
-                    await refetchInvoices();
-                } catch (error) {
-                    console.error('Failed to update distributor:', error);
                 }
             }
-
             setIsInvoiceModalOpen(false);
         },
     });
@@ -131,7 +126,6 @@ const Distributors = () => {
     };
 
     const handleSelectDistributor = (distributor) => {
-        console.log('Selected distributor:', distributor);
         setSelectedDistributor(distributor);
         setInvoicePage(1);
     };

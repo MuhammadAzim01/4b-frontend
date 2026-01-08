@@ -52,6 +52,10 @@ const ApprovalModal = ({ isOpen, onClose, entry }) => {
                                 <p className="font-medium text-slate-900 dark:text-white">{entry.supplier?.name || 'N/A'}</p>
                             </div>
                         </div>
+                        <div>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">Note from Employee</p>
+                            <p className="font-medium text-slate-900 dark:text-white">{entry.notes || 'N/A'}</p>
+                        </div>
                     </div>
 
                     <div>

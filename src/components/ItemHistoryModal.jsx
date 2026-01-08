@@ -145,6 +145,7 @@ const ItemHistoryModal = ({ isOpen, onClose, itemName, role }) => {
                                         <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Date</th>
                                         <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Supplier</th>
                                         <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Quantity</th>
+                                        <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Remaining Quantity</th>
                                         <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Note</th>
                                         {role === 'admin' && (
                                             <>
@@ -163,6 +164,7 @@ const ItemHistoryModal = ({ isOpen, onClose, itemName, role }) => {
                                             </td>
                                             <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">{entry.supplier?.name || '-'}</td>
                                             <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">{entry.quantity}</td>
+                                            <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">{entry.remaining_quantity.toFixed(2)}</td>
                                             <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm italic">{entry.notes || '-'}</td>
                                             {role === 'admin' && (
                                                 <>
