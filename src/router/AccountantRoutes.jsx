@@ -18,7 +18,7 @@ export default function AccountantRoutes() {
                     <Route path="inventory" element={<Inventory />} />
                     <Route path="expenses" element={<Expenses />} />
                     <Route path="production" element={<Production />} />
-                    <Route path="production/:batchNumber" element={<Production />} />
+                    <Route path="distributors" element={<Distributors />} />
                     <Route path="production/:batchNumber" element={<Production />} />
                     <Route path="warehouse" element={<Warehouse />} />
                     <Route path="*" element={<Navigate to="inventory" replace />} />

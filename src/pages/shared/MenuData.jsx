@@ -12,6 +12,7 @@ export const menuItems = {
     ],
     accountant: [
         { icon: "inventory_2", url: "/accountant/inventory", name: "Inventory" },
+        { icon: "groups", url: "/accountant/distributors", name: "Distributors" },
         { icon: "payments", url: "/accountant/expenses", name: "Expenses" },
         { icon: "precision_manufacturing", url: "/accountant/production", name: "Production" },
         { icon: "warehouse", url: "/accountant/warehouse", name: "Warehouse" },
