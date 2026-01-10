@@ -12,6 +12,14 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
     const [items, setItems] = useState([{ id: Date.now(), product: '', quantity: '', unitPrice: '' }]);
     const [invoiceSearch, setInvoiceSearch] = useState('');
 
+    // FOC State
+    const [isFocEnabled, setIsFocEnabled] = useState(false);
+    const [focItems, setFocItems] = useState([{ id: Date.now(), product: '', quantity: '', unitPrice: '' }]);
+
+    // Freight & Payment State
+    const [freightCost, setFreightCost] = useState('');
+    const [paymentMethod, setPaymentMethod] = useState('Cash');
+
     const { data: products, isFetching: productsLoading } = useFetchQuery({
         url: 'production/products/',
         queryKey: ['products'],
@@ -35,6 +43,10 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
             setNotes('');
             setItems([{ id: Date.now(), product: '', quantity: '', unitPrice: '' }]);
             setInvoiceSearch('');
+            setIsFocEnabled(false);
+            setFocItems([{ id: Date.now(), product: '', quantity: '', unitPrice: '' }]);
+            setFreightCost('');
+            setPaymentMethod('Cash');
         }
     }, [isOpen]);
 
@@ -50,6 +62,21 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
 
     const handleItemChange = (id, field, value) => {
         setItems(items.map(item => item.id === id ? { ...item, [field]: value } : item));
+    };
+
+    // FOC Handlers
+    const handleAddFocItem = () => {
+        setFocItems([...focItems, { id: Date.now(), product: '', quantity: '', unitPrice: '' }]);
+    };
+
+    const handleRemoveFocItem = (id) => {
+        if (focItems.length > 1) {
+            setFocItems(focItems.filter(item => item.id !== id));
+        }
+    };
+
+    const handleFocItemChange = (id, field, value) => {
+        setFocItems(focItems.map(item => item.id === id ? { ...item, [field]: value } : item));
     };
 
     const handleInvoiceToggle = (invoiceId) => {
@@ -84,31 +111,81 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
         }, 0);
     };
 
+    const getFocTotalAmount = () => {
+        if (!isFocEnabled) return 0;
+        return focItems.reduce((sum, item) => {
+            const qty = parseFloat(item.quantity || 0);
+            const price = parseFloat(item.unitPrice || 0);
+            return sum + (qty * price);
+        }, 0);
+    };
+
     const handleSubmit = (e) => {
         e.preventDefault();
 
         if (transactionType === 'sale') {
-            const formattedItems = items.map(item => ({
-                product: parseInt(item.product),
-                quantity: parseFloat(item.quantity),
-                unit_price: parseFloat(item.unitPrice)
-            }));
+            const formattedItems = items
+                .filter(item => item.product && item.quantity)
+                .map(item => ({
+                    product: parseInt(item.product),
+                    quantity: parseFloat(item.quantity),
+                    unit_price: parseFloat(item.unitPrice)
+                }));
+
+            // Add FOC items with 0 price if enabled
+            let formattedFocItems = [];
+            if (isFocEnabled) {
+                formattedFocItems = focItems.map(item => ({
+                    product: parseInt(item.product),
+                    quantity: parseFloat(item.quantity),
+                    unit_price: 0 // Free of cost
+                })).filter(item => item.product && item.quantity > 0);
+
+                if (formattedFocItems.length > 0) {
+                    formattedItems.push(...formattedFocItems);
+                }
+            }
+
+            if (formattedItems.length === 0) {
+                return;
+            }
+
+            // Calculations
+            const cashPaid = parseFloat(amountPaid || 0);
+            const freight = parseFloat(freightCost || 0);
+            const totalPaid = cashPaid + freight; // Freight considered as valid payment/deduction
+
+            // Generate detailed notes
+            let detailedNotes = notes;
+            if (freight > 0) detailedNotes += `\n[Freight Cost: Rs. ${freight.toFixed(2)}]`;
+            if (paymentType === 'debit' || cashPaid > 0) detailedNotes += `\n[Payment Method: ${paymentMethod}]`;
+            if (cashPaid > 0 && freight > 0) detailedNotes += `\n[Breakdown: Cash Rs. ${cashPaid.toFixed(2)} + Freight Rs. ${freight.toFixed(2)} = Rs. ${totalPaid.toFixed(2)}]`;
+            if (isFocEnabled && getFocTotalAmount() > 0) detailedNotes += `\n(Includes FOC Sampling worth Rs. ${getFocTotalAmount().toFixed(2)})`;
+
 
             onSubmit({
                 distributor: distributor.id,
                 transaction_type: transactionType,
                 payment_type: paymentType,
-                amount_paid: paymentType === 'debit' ? 0 : parseFloat(amountPaid || 0),
+                amount_paid: paymentType === 'debit' ? 0 : totalPaid, // Send total effective payment
                 items: formattedItems,
-                notes
+                notes: detailedNotes,
+                foc_amount: getFocTotalAmount(),
+                freight_cost: freight,
+                payment_method: paymentMethod,
             });
         } else {
+            // Payment Transaction
+            let detailedNotes = notes;
+            detailedNotes += `\n[Payment Method: ${paymentMethod}]`;
+
             onSubmit({
                 distributor: distributor.id,
                 transaction_type: transactionType,
                 amount_paid: parseFloat(amountPaid),
+                payment_method: paymentMethod,
                 related_invoices: selectedInvoices,
-                notes
+                notes: detailedNotes
             });
         }
     };
@@ -197,7 +274,7 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                                 {items.map((item) => (
                                     <div key={item.id} className="flex gap-2 mb-2">
                                         <select
-                                            required
+                                            required={!isFocEnabled}
                                             value={item.product}
                                             onChange={(e) => handleItemChange(item.id, 'product', e.target.value)}
                                             className="flex-1 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
@@ -208,7 +285,7 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                                             ))}
                                         </select>
                                         <input
-                                            required
+                                            required={!isFocEnabled}
                                             type="number"
                                             placeholder="Qty"
                                             min="0.01"
@@ -218,7 +295,7 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                                             className="w-24 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
                                         />
                                         <input
-                                            required
+                                            required={!isFocEnabled}
                                             type="number"
                                             placeholder="Price"
                                             min="0"
@@ -243,40 +320,143 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                                         )}
                                     </div>
                                 ))}
-                                <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-800 flex justify-between items-center">
-                                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Total Amount:</span>
-                                    {/* Show integer if possible, else 2 decimals */}
+                            </div>
+
+                            {/* Sampling/FOC Section */}
+                            <div className="bg-slate-50 dark:bg-slate-800/30 p-4 rounded-xl border border-slate-100 dark:border-slate-700">
+                                <label className="flex items-center gap-2 cursor-pointer mb-3">
+                                    <input
+                                        type="checkbox"
+                                        checked={isFocEnabled}
+                                        onChange={(e) => setIsFocEnabled(e.target.checked)}
+                                        className="rounded border-slate-300 text-eva-blue focus:ring-eva-blue"
+                                    />
+                                    <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Sampling / FOC</span>
+                                </label>
+
+                                {isFocEnabled && (
+                                    <div className="animate-in fade-in slide-in-from-top-2">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">FOC Products</label>
+                                            <button
+                                                type="button"
+                                                onClick={handleAddFocItem}
+                                                className="text-xs font-bold text-green-600 hover:underline flex items-center gap-1"
+                                            >
+                                                <span className="material-symbols-outlined text-sm">add</span> Add FOC Product
+                                            </button>
+                                        </div>
+                                        {focItems.map((item) => (
+                                            <div key={item.id} className="flex gap-2 mb-2">
+                                                <select
+                                                    required
+                                                    value={item.product}
+                                                    onChange={(e) => handleFocItemChange(item.id, 'product', e.target.value)}
+                                                    className="flex-1 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
+                                                >
+                                                    <option value="">Select Product</option>
+                                                    {products?.results?.map(p => (
+                                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                                    ))}
+                                                </select>
+                                                <input
+                                                    required
+                                                    type="number"
+                                                    placeholder="Qty"
+                                                    min="0.01"
+                                                    step="0.01"
+                                                    value={item.quantity}
+                                                    onChange={(e) => handleFocItemChange(item.id, 'quantity', e.target.value)}
+                                                    className="w-24 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
+                                                />
+                                                <input
+                                                    required
+                                                    type="number"
+                                                    placeholder="Cost"
+                                                    min="0"
+                                                    step="0.01"
+                                                    value={item.unitPrice}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        if (val === '' || parseFloat(val) >= 0) {
+                                                            handleFocItemChange(item.id, 'unitPrice', val);
+                                                        }
+                                                    }}
+                                                    className="w-28 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
+                                                />
+                                                {focItems.length > 1 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRemoveFocItem(item.id)}
+                                                        className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
+                                                    >
+                                                        <span className="material-symbols-outlined text-lg">delete</span>
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
+
+                                        <div className="mt-3 flex justify-between items-center text-xs">
+                                            <span className="text-slate-500">
+                                                * FOC items will be issued at 0 price. Discount equivalent to {parseFloat(getFocTotalAmount()).toFixed(2)} applied.
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-800 space-y-3">
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-slate-700 dark:text-slate-300">Subtotal:</span>
+                                    <span className="font-semibold text-slate-900 dark:text-white">
+                                        Rs. {getTotalAmount().toFixed(2)}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                                        Freight Cost deduction: <span className="text-xs text-red-500">*</span>
+                                    </span>
+                                    <input
+                                        required
+                                        type="number"
+                                        placeholder="0"
+                                        min="0"
+                                        step="0.01"
+                                        value={freightCost}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            if (val === '' || parseFloat(val) >= 0) setFreightCost(val);
+                                        }}
+                                        className="w-32 px-2 py-1 text-right rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
+                                    />
+                                </div>
+                                <div className="flex justify-between items-center border-t border-slate-200 dark:border-slate-700 pt-2">
+                                    <span className="text-sm font-bold text-slate-900 dark:text-white">Net Payable by Distributor:</span>
                                     <span className="text-lg font-bold text-eva-blue">
-                                        Rs. {getTotalAmount() % 1 === 0 ? getTotalAmount() : getTotalAmount().toFixed(2)}
+                                        Rs. {Math.max(0, getTotalAmount() - parseFloat(freightCost || 0)).toFixed(2)}
                                     </span>
                                 </div>
                             </div>
 
                             {paymentType === 'credit' && (
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Amount Paid (Partial)</label>
-                                    <input
-                                        type="number"
-                                        placeholder="0"
-                                        min="0"
-                                        step="1"
-                                        value={amountPaid}
-                                        onChange={(e) => {
-                                            const val = e.target.value;
-                                            if (val === '' || parseFloat(val) >= 0) {
-                                                setAmountPaid(val);
-                                            }
-                                        }}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                                                e.preventDefault();
-                                                const currentVal = parseFloat(amountPaid) || 0;
-                                                const newVal = e.key === 'ArrowUp' ? currentVal + 1 : Math.max(0, currentVal - 1);
-                                                setAmountPaid(newVal.toString());
-                                            }
-                                        }}
-                                        className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
-                                    />
+                                <div className="space-y-3 bg-slate-50 dark:bg-slate-800/30 p-4 rounded-xl">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Cash Payment Received</label>
+                                        <input
+                                            type="number"
+                                            placeholder="0"
+                                            min="0"
+                                            step="1"
+                                            value={amountPaid}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                if (val === '' || parseFloat(val) >= 0) {
+                                                    setAmountPaid(val);
+                                                }
+                                            }}
+                                            className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
+                                        />
+                                    </div>
                                 </div>
                             )}
                         </>
@@ -376,7 +556,18 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                             </div>
                         </>
                     )}
-
+                    <div>
+                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Payment Method</label>
+                        <select
+                            value={paymentMethod}
+                            onChange={(e) => setPaymentMethod(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
+                        >
+                            <option value="Cash">Cash</option>
+                            <option value="Cheque">Cheque</option>
+                            <option value="Bank Transfer">Bank Transfer</option>
+                        </select>
+                    </div>
                     <div>
                         <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Notes (Optional)</label>
                         <textarea

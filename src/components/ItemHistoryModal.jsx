@@ -3,7 +3,8 @@ import { fetchWithAuth } from '../utils/fetchApis';
 import { useFetchQuery } from '../hooks/useFetchQuery';
 import LoadingSpinner from './ui/LoadingSpinner';
 
-const ItemHistoryModal = ({ isOpen, onClose, itemName, role }) => {
+const ItemHistoryModal = ({ isOpen, onClose, item, role }) => {
+    const itemName = item?.name;
     const { data, isFetching, isError, error } = useFetchQuery({
         url: `inventory/transactions/?item=${itemName}&status=approve`,
         queryKey: [`transactions-${itemName}`],
@@ -153,6 +154,7 @@ const ItemHistoryModal = ({ isOpen, onClose, itemName, role }) => {
                                                 <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Total Cost</th>
                                             </>
                                         )}
+                                        <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Unit Price Updated</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-200 dark:divide-gray-700">
@@ -172,6 +174,9 @@ const ItemHistoryModal = ({ isOpen, onClose, itemName, role }) => {
                                                     <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">Rs. {(entry.quantity * entry.unit_cost).toFixed(2)}</td>
                                                 </>
                                             )}
+                                            <td className="px-4 py-3 text-sm" style={{ color: entry.unit_price_updated > 0 ? 'green' : 'red' }}>
+                                                {entry.unit_price_updated > 0 ? `+${entry.unit_price_updated}` : `${entry.unit_price_updated}`}
+                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>

@@ -1,9 +1,19 @@
-// Template for Distributor Invoice
 export const generateDistributorInvoiceHtml = (invoice) => {
-    const isSale = invoice.transaction_type === 'sale';
-    const createdDate = new Date(invoice.created_at).toLocaleString();
+  const isSale = invoice.transaction_type === 'sale';
+  const createdDate = new Date(invoice.created_at).toLocaleString();
 
-    return `
+  // Parse Data from Notes
+  const freightMatch = invoice.notes?.match(/\[Freight Cost: Rs\. ([\d.]+)\]/);
+  const freightCost = freightMatch ? parseFloat(freightMatch[1]) : 0;
+
+  const paymentMethodMatch = invoice.notes?.match(/\[Payment Method: ([\w\s]+)\]/);
+  const paymentMethod = paymentMethodMatch ? paymentMethodMatch[1] : null;
+
+  const breakdownMatch = invoice.notes?.match(/\[Breakdown: Cash Rs\. ([\d.]+) \+ Freight/);
+  const cashPaid = breakdownMatch ? parseFloat(breakdownMatch[1]) : parseFloat(invoice.amount_paid) - freightCost;
+  const netBill = parseFloat(invoice.total_amount) - freightCost;
+
+  return `
     <!DOCTYPE html>
     <html>
       <head>
@@ -159,6 +169,12 @@ export const generateDistributorInvoiceHtml = (invoice) => {
             padding: 8px 0;
             font-size: 14px;
           }
+          .payment-row.strong {
+            font-weight: 700;
+            border-top: 1px dashed #cbd5e1;
+            padding-top: 12px;
+            margin-top: 4px;
+          }
           .payment-row.total {
             border-top: 2px solid #2563eb;
             padding-top: 16px;
@@ -179,6 +195,9 @@ export const generateDistributorInvoiceHtml = (invoice) => {
           }
           .payment-value.paid {
             color: #16a34a;
+          }
+          .payment-value.deduction {
+            color: #dc2626;
           }
           .payment-value.due {
             color: #dc2626;
@@ -309,9 +328,9 @@ export const generateDistributorInvoiceHtml = (invoice) => {
           <tbody>
             ${invoice.items.map(item => `
               <tr>
-                <td>${item.product_name}</td>
+                <td>${item.product_name} ${parseFloat(item.unit_price) === 0 ? '<span style="color:green; font-weight:bold; font-size:10px; padding:2px 4px; border:1px solid green; border-radius:3px;">FOC</span>' : ''}</td>
                 <td class="text-right font-mono">${item.quantity}</td>
-                <td class="text-right font-mono">Rs. ${parseFloat(item.unit_price).toFixed(2)}</td>
+                <td class="text-right font-mono">${parseFloat(item.unit_price) === 0 ? 'Free' : 'Rs. ' + parseFloat(item.unit_price).toFixed(2)}</td>
                 <td class="text-right font-mono">Rs. ${parseFloat(item.total_price).toFixed(2)}</td>
               </tr>
             `).join('')}
@@ -321,12 +340,27 @@ export const generateDistributorInvoiceHtml = (invoice) => {
 
         <div class="payment-summary">
           <div class="payment-row">
-            <span class="payment-label">Total Amount</span>
+            <span class="payment-label">Gross Amount</span>
             <span class="payment-value highlight">Rs. ${parseFloat(invoice.total_amount).toFixed(2)}</span>
           </div>
+          
+          ${freightCost > 0 ? `
           <div class="payment-row">
-            <span class="payment-label">Initial Payment</span>
-            <span class="payment-value paid">Rs. ${parseFloat(invoice.amount_paid).toFixed(2)}</span>
+            <span class="payment-label">Freight Cost Deduction</span>
+            <span class="payment-value deduction">- Rs. ${freightCost.toFixed(2)}</span>
+          </div>
+          <div class="payment-row strong">
+             <span class="payment-label">Net Bill Amount</span>
+             <span class="payment-value">Rs. ${netBill.toFixed(2)}</span>
+          </div>
+          ` : ''}
+
+          <div class="payment-row" style="margin-top: 12px;">
+            <span class="payment-label">
+                ${isSale ? 'Payment Received' : 'Payment Amount'} 
+                ${paymentMethod ? `<span style="font-size: 11px; color: #64748b; background: white; padding: 2px 6px; border-radius: 4px; border: 1px solid #cbd5e1; margin-left:8px;">${paymentMethod}</span>` : ''}
+            </span>
+            <span class="payment-value paid">Rs. ${(cashPaid > 0 ? cashPaid : 0).toFixed(2)}</span>
           </div>
           
           ${isSale && invoice.payment_invoices && invoice.payment_invoices.length > 0 ? `

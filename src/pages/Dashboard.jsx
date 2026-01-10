@@ -6,6 +6,8 @@ import NotificationBell from '../components/ui/NotificationBell';
 const Dashboard = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [metrics, setMetrics] = useState({
+        inventory_value: 0,
+        products_value: 0,
         total_inventory_value: 0,
         monthly_revenue: 0,
         monthly_production_output: 0,
@@ -63,12 +65,12 @@ const Dashboard = () => {
 
             const graphRes = await fetchWithAuth(`dashboard/production-vs-sales/?${params.toString()}`);
             const data = graphRes?.data?.data || graphRes?.data || [];
-            
+
             // Normalize for chart display
             const maxVal = Math.max(
                 ...data.map(d => Math.max(parseFloat(d.production || 0), parseFloat(d.sales || 0)))
             );
-            
+
             const normalized = data.map(d => ({
                 label: d.label,
                 production: parseFloat(d.production || 0),
@@ -84,9 +86,9 @@ const Dashboard = () => {
     };
 
     const formatCurrency = (val) => {
-        return new Intl.NumberFormat('en-IN', {
+        return new Intl.NumberFormat('en-PK', {
             style: 'currency',
-            currency: 'INR',
+            currency: 'PKR',
             maximumFractionDigits: 0
         }).format(val);
     };
@@ -127,10 +129,17 @@ const Dashboard = () => {
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
                     <DashboardCard
                         title="Total Inventory Value"
-                        value={formatCurrency(metrics.total_inventory_value)}
+                        value={formatCurrency(metrics.inventory_value)}
                         icon="inventory_2"
                         color="blue"
-                        subtitle="Raw materials + Finished products"
+                        subtitle="Raw materials"
+                    />
+                    <DashboardCard
+                        title="Total Product Value"
+                        value={formatCurrency(metrics.products_value)}
+                        icon="inventory_2"
+                        color="blue"
+                        subtitle="Finished products"
                     />
                     <DashboardCard
                         title="Monthly Revenue"
@@ -274,8 +283,8 @@ const Dashboard = () => {
                                         <div className={`flex size-8 shrink-0 items-center justify-center rounded-full bg-${color}-100 text-${color}-600 dark:bg-${color}-900/30 dark:text-${color}-400`}>
                                             <span className="material-symbols-outlined text-sm">
                                                 {alert.type === 'low_stock' || alert.type === 'low_stock_product' ? 'inventory' :
-                                                 alert.type === 'high_due' ? 'account_balance_wallet' :
-                                                 'manufacturing'}
+                                                    alert.type === 'high_due' ? 'account_balance_wallet' :
+                                                        'manufacturing'}
                                             </span>
                                         </div>
                                         <div className="flex-1 min-w-0">
