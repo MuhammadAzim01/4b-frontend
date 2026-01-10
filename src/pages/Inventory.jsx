@@ -14,7 +14,7 @@ const Inventory = () => {
     const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [approvalItem, setApprovalItem] = useState(null);
-    const [historyItemName, setHistoryItemName] = useState(null);
+    const [historyItem, setHistoryItem] = useState(null);
     const [activeTab, setActiveTab] = useState('raw_materials');
     const { role } = getAuthStatus()?.user || 'accountant';
 
@@ -54,8 +54,8 @@ const Inventory = () => {
         setApprovalItem(entry);
     };
 
-    const handleItemClick = (itemName) => {
-        setHistoryItemName(itemName);
+    const handleItemClick = (item) => {
+        setHistoryItem(item);
     };
 
     const rawInventory = data?.results || [];
@@ -231,7 +231,6 @@ const Inventory = () => {
                                             </>
                                         )}
                                         <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Status</th>
-                                        <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-200 dark:divide-gray-700">
@@ -239,7 +238,7 @@ const Inventory = () => {
                                         <tr key={item.id}>
                                             <td className="h-[72px] px-4 py-2 text-slate-900 dark:text-white text-sm">
                                                 <button
-                                                    onClick={() => handleItemClick(item.name)}
+                                                    onClick={() => handleItemClick(item)}
                                                     className="font-bold text-eva-blue hover:underline text-left"
                                                 >
                                                     {item.name}
@@ -261,9 +260,6 @@ const Inventory = () => {
                                                     {item.stock_status}
                                                 </span>
                                             </td>
-                                            <td className="h-[72px] px-4 py-2 text-sm">
-                                                <button className="font-medium text-eva-blue hover:underline">Adjustment Entry</button>
-                                            </td>
                                         </tr>
                                     ))}
                                     {/* Show pending items for accountant in the main list as requested, but maybe with a different status?
@@ -282,9 +278,6 @@ const Inventory = () => {
                                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400">
                                                     Pending Approval
                                                 </span>
-                                            </td>
-                                            <td className="h-[72px] px-4 py-2 text-sm">
-                                                <span className="text-slate-400 italic text-xs">Awaiting Admin</span>
                                             </td>
                                         </tr>
                                     ))}
@@ -314,9 +307,9 @@ const Inventory = () => {
             />
 
             <ItemHistoryModal
-                isOpen={!!historyItemName}
-                onClose={() => setHistoryItemName(null)}
-                itemName={historyItemName}
+                isOpen={!!historyItem}
+                onClose={() => setHistoryItem(null)}
+                item={historyItem}
                 role={role}
             />
         </div>

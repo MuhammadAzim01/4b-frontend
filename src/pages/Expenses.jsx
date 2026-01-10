@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { fetchWithAuth } from '../utils/fetchApis';
 import ConfirmDialog from '../components/ConfirmDialog';
+import ExpenseDetailModal from '../components/ExpenseDetailModal';
 
 const DEFAULT_CATEGORIES = [
     { id: 'rent', name: 'Rent', icon: 'home' },
@@ -37,6 +38,10 @@ const Expenses = () => {
     // Confirmation dialog state
     const [showConfirmDialog, setShowConfirmDialog] = useState(false);
     const [pendingExpense, setPendingExpense] = useState(null);
+
+    // Detail Modal State
+    const [selectedExpense, setSelectedExpense] = useState(null);
+    const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
     // Load data on mount
     useEffect(() => {
@@ -262,6 +267,11 @@ const Expenses = () => {
             currency: 'PKR',
             maximumFractionDigits: 0
         }).format(val);
+    };
+
+    const handleExpenseClick = (expense) => {
+        setSelectedExpense(expense);
+        setIsDetailModalOpen(true);
     };
 
     return (
@@ -490,7 +500,11 @@ const Expenses = () => {
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-gray-800">
                                         {filteredExpenses.map(expense => (
-                                            <tr key={expense.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                            <tr
+                                                key={expense.id}
+                                                onClick={() => handleExpenseClick(expense)}
+                                                className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
+                                            >
                                                 <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-white whitespace-nowrap">
                                                     {new Date(expense.date).toLocaleDateString()}
                                                 </td>
@@ -531,6 +545,13 @@ const Expenses = () => {
                 confirmText="Add Expense"
                 cancelText="Cancel"
                 type="warning"
+            />
+
+            {/* Expense Detail Modal */}
+            <ExpenseDetailModal
+                isOpen={isDetailModalOpen}
+                onClose={() => setIsDetailModalOpen(false)}
+                expense={selectedExpense}
             />
         </div>
     );
