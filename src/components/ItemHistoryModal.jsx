@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { fetchWithAuth } from '../utils/fetchApis';
 import { useFetchQuery } from '../hooks/useFetchQuery';
 import LoadingSpinner from './ui/LoadingSpinner';
-import AdjustmentModal from './AdjustmentModal';
 
 const ItemHistoryModal = ({ isOpen, onClose, item, role }) => {
     const itemName = item?.name;
@@ -18,13 +17,11 @@ const ItemHistoryModal = ({ isOpen, onClose, item, role }) => {
     const [supplierFilter, setSupplierFilter] = useState('');
     const [showFilters, setShowFilters] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
-    const [adjustmentEntry, setAdjustmentEntry] = useState(null);
     const ITEMS_PER_PAGE = 20;
 
     // Reset page when filters change
     React.useEffect(() => {
         setCurrentPage(1);
-        setAdjustmentEntry(null);
     }, [startDateTime, endDateTime, supplierFilter]);
 
     if (!isOpen || !itemName) return null;
@@ -157,7 +154,7 @@ const ItemHistoryModal = ({ isOpen, onClose, item, role }) => {
                                                 <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Total Cost</th>
                                             </>
                                         )}
-                                        <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Action</th>
+                                        <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Unit Price Updated</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-200 dark:divide-gray-700">
@@ -177,13 +174,8 @@ const ItemHistoryModal = ({ isOpen, onClose, item, role }) => {
                                                     <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">Rs. {(entry.quantity * entry.unit_cost).toFixed(2)}</td>
                                                 </>
                                             )}
-                                            <td className="px-4 py-3 text-sm">
-                                                <button
-                                                    onClick={() => setAdjustmentEntry(entry)}
-                                                    className="font-medium text-eva-blue hover:underline text-sm"
-                                                >
-                                                    Adjustment Entry
-                                                </button>
+                                            <td className="px-4 py-3 text-sm" style={{ color: entry.unit_price_updated > 0 ? 'green' : 'red' }}>
+                                                {entry.unit_price_updated > 0 ? `+${entry.unit_price_updated}` : `${entry.unit_price_updated}`}
                                             </td>
                                         </tr>
                                     ))}
@@ -222,14 +214,6 @@ const ItemHistoryModal = ({ isOpen, onClose, item, role }) => {
                     <button onClick={onClose} className="ml-4 px-4 py-2 rounded-lg text-sm font-semibold bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200">Close</button>
                 </div>
             </div>
-
-            <AdjustmentModal
-                isOpen={!!adjustmentEntry}
-                onClose={() => setAdjustmentEntry(null)}
-                entry={adjustmentEntry}
-                item={item}
-                role={role}
-            />
         </div>
     );
 };

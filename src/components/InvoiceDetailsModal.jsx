@@ -13,6 +13,17 @@ const InvoiceDetailsModal = ({ isOpen, onClose, invoice }) => {
         printWindow.document.close();
     };
 
+    // Extract Data from Notes
+    const freightMatch = invoice.notes?.match(/\[Freight Cost: Rs\. ([\d.]+)\]/);
+    const freightCost = freightMatch ? parseFloat(freightMatch[1]) : 0;
+
+    const paymentMethodMatch = invoice.notes?.match(/\[Payment Method: ([\w\s]+)\]/);
+    const paymentMethod = paymentMethodMatch ? paymentMethodMatch[1] : null;
+
+    // Use breakdown if available (for precise history), otherwise calculate
+    const breakdownMatch = invoice.notes?.match(/\[Breakdown: Cash Rs\. ([\d.]+) \+ Freight/);
+    const cashPaid = breakdownMatch ? parseFloat(breakdownMatch[1]) : Math.max(0, parseFloat(invoice.amount_paid) - freightCost);
+
     return (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
             <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-2xl border border-slate-200 dark:border-slate-800 max-h-[90vh] overflow-y-auto">
@@ -43,11 +54,10 @@ const InvoiceDetailsModal = ({ isOpen, onClose, invoice }) => {
                         </div>
                         <div>
                             <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Transaction Type</p>
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                isSale 
-                                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300' 
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${isSale
+                                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300'
                                     : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
-                            }`}>
+                                }`}>
                                 {isSale ? 'Sale' : 'Payment'} - {invoice.payment_type}
                             </span>
                         </div>
@@ -82,14 +92,32 @@ const InvoiceDetailsModal = ({ isOpen, onClose, invoice }) => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {invoice.items.map((item) => (
-                                        <tr key={item.id} className="border-b border-slate-100 dark:border-slate-700/50">
-                                            <td className="py-2 text-slate-900 dark:text-white">{item.product_name}</td>
-                                            <td className="py-2 text-right font-mono text-slate-700 dark:text-slate-300">{item.quantity}</td>
-                                            <td className="py-2 text-right font-mono text-slate-700 dark:text-slate-300">Rs. {parseFloat(item.unit_price).toFixed(2)}</td>
-                                            <td className="py-2 text-right font-mono font-semibold text-slate-900 dark:text-white">Rs. {parseFloat(item.total_price).toFixed(2)}</td>
-                                        </tr>
-                                    ))}
+                                    {invoice.items.map((item) => {
+                                        const isFoc = parseFloat(item.unit_price) === 0;
+                                        return (
+                                            <tr key={item.id} className={`border-b border-slate-100 dark:border-slate-700/50 ${isFoc ? 'bg-green-50/50 dark:bg-green-900/10' : ''}`}>
+                                                <td className="py-2 text-slate-900 dark:text-white">
+                                                    {item.product_name}
+                                                    {isFoc && (
+                                                        <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
+                                                            FOC / SAMPLE
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="py-2 text-right font-mono text-slate-700 dark:text-slate-300">{item.quantity}</td>
+                                                <td className="py-2 text-right font-mono text-slate-700 dark:text-slate-300">
+                                                    {isFoc ? (
+                                                        <span className="text-green-600 dark:text-green-400 font-bold">Free</span>
+                                                    ) : (
+                                                        `Rs. ${parseFloat(item.unit_price).toFixed(2)}`
+                                                    )}
+                                                </td>
+                                                <td className="py-2 text-right font-mono font-semibold text-slate-900 dark:text-white">
+                                                    Rs. {parseFloat(item.total_price).toFixed(2)}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
@@ -98,14 +126,33 @@ const InvoiceDetailsModal = ({ isOpen, onClose, invoice }) => {
                     {/* Payment Summary */}
                     <div className="bg-blue-50 dark:bg-blue-900/10 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
                         <div className="space-y-2">
-                            <div className="flex justify-between items-center">
-                                <span className="text-sm text-slate-700 dark:text-slate-300">Total Amount</span>
-                                <span className="text-sm font-mono font-bold text-slate-900 dark:text-white">Rs. {parseFloat(invoice.total_amount).toFixed(2)}</span>
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="text-slate-700 dark:text-slate-300">Total Amount</span>
+                                <span className="font-mono font-bold text-slate-900 dark:text-white">Rs. {parseFloat(invoice.total_amount).toFixed(2)}</span>
                             </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-sm text-slate-700 dark:text-slate-300">Initial Payment</span>
-                                <span className="text-sm font-mono font-semibold text-green-600 dark:text-green-400">Rs. {parseFloat(invoice.amount_paid).toFixed(2)}</span>
+
+                            {freightCost > 0 && (
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-slate-700 dark:text-slate-300">Freight Deduction</span>
+                                    <span className="font-mono font-semibold text-red-600 dark:text-red-400">- Rs. {freightCost.toFixed(2)}</span>
+                                </div>
+                            )}
+
+                            <div className="flex justify-between items-center text-sm border-t border-blue-200 dark:border-blue-800 pt-2 border-dashed">
+                                <span className="font-semibold text-slate-900 dark:text-white">Net Bill</span>
+                                <span className="font-mono font-bold text-slate-900 dark:text-white">
+                                    Rs. {(parseFloat(invoice.total_amount) - freightCost).toFixed(2)}
+                                </span>
                             </div>
+
+                            <div className="flex justify-between items-center text-sm pt-2">
+                                <span className="text-slate-700 dark:text-slate-300">
+                                    Cash/Bank Payment
+                                    {paymentMethod && <span className="ml-2 bg-blue-100 text-blue-800 text-[10px] px-2 py-0.5 rounded-full">{paymentMethod}</span>}
+                                </span>
+                                <span className="font-mono font-semibold text-green-600 dark:text-green-400">Rs. {cashPaid.toFixed(2)}</span>
+                            </div>
+
                             {isSale && invoice.payment_invoices && invoice.payment_invoices.length > 0 && (
                                 <div className="pt-2 border-t border-blue-200 dark:border-blue-800">
                                     <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">Payment History</p>
@@ -121,11 +168,10 @@ const InvoiceDetailsModal = ({ isOpen, onClose, invoice }) => {
                             )}
                             <div className="flex justify-between items-center pt-2 border-t border-blue-200 dark:border-blue-800">
                                 <span className="text-sm font-bold text-slate-900 dark:text-white">Balance Due</span>
-                                <span className={`text-lg font-mono font-bold ${
-                                    parseFloat(invoice.balance_due) > 0 
-                                        ? 'text-red-600 dark:text-red-400' 
+                                <span className={`text-lg font-mono font-bold ${parseFloat(invoice.balance_due) > 0
+                                        ? 'text-red-600 dark:text-red-400'
                                         : 'text-green-600 dark:text-green-400'
-                                }`}>
+                                    }`}>
                                     Rs. {parseFloat(invoice.balance_due).toFixed(2)}
                                 </span>
                             </div>
