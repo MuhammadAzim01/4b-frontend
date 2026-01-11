@@ -1,343 +1,455 @@
 import React, { useState } from 'react';
-import clsx from 'clsx';
+import { toast } from 'sonner';
+import { useFetchQuery } from '../hooks/useFetchQuery';
+import { useCreateUpdateMutation } from '../hooks/useCreateUpdateMutation';
+import { fetchWithAuth } from '../utils/fetchApis';
+import { getAuthStatus } from '../utils/auth';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
+import AddDistributorModal from '../components/AddDistributorModal';
+import CreateInvoiceModal from '../components/CreateInvoiceModal';
+import InvoiceDetailsModal from '../components/InvoiceDetailsModal';
 
 const Distributors = () => {
     const [activeTab, setActiveTab] = useState('history');
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
+    const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+    const [selectedInvoice, setSelectedInvoice] = useState(null);
+    const [selectedDistributor, setSelectedDistributor] = useState(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [invoicePage, setInvoicePage] = useState(1);
 
-    const handleCreateInvoiceClick = () => {
-        setIsInvoiceModalOpen(true);
+    const { user } = getAuthStatus();
+    const isAdmin = user?.role === 'admin';
+
+    // Fetch distributors
+    const { data: distributorsData, isFetching: loadingDistributors, refetch: refetchDistributors } = useFetchQuery({
+        url: `distributors/?search=${searchQuery}`,
+        queryKey: ['distributors', searchQuery],
+        fetchFunction: fetchWithAuth,
+    });
+
+    // Fetch invoices for selected distributor
+    const getInvoiceUrl = () => {
+        if (!selectedDistributor) return null;
+        let url = `distributors/invoices/?distributor=${selectedDistributor.id}&page=${invoicePage}&page_size=5`;
+        if (activeTab === 'sales') url += '&transaction_type=sale';
+        if (activeTab === 'payments') url += '&transaction_type=payment';
+        return url;
     };
 
-    const handleConfirmInvoice = () => {
-        setIsInvoiceModalOpen(false);
-        alert('Invoice created successfully!');
+    const { data: invoicesData, isFetching: loadingInvoices, refetch: refetchInvoices } = useFetchQuery({
+        url: getInvoiceUrl(),
+        queryKey: ['invoices', selectedDistributor?.id, invoicePage, activeTab],
+        fetchFunction: fetchWithAuth,
+        enabled: !!selectedDistributor,
+    });
+
+    // Add distributor mutation
+    const addDistributorMutation = useCreateUpdateMutation({
+        url: 'distributors/',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        fetchFunction: fetchWithAuth,
+        onSuccessMessage: 'Distributor added successfully',
+        onErrorMessage: 'Failed to add distributor',
+        onSuccess: () => {
+            refetchDistributors();
+            setIsAddModalOpen(false);
+        },
+    });
+
+    // Create invoice mutation
+    const createInvoiceMutation = useCreateUpdateMutation({
+        url: 'distributors/invoices/create/',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        fetchFunction: fetchWithAuth,
+        onSuccessMessage: 'Invoice created successfully',
+        onErrorMessage: 'Failed to create invoice',
+        onSuccess: async () => {
+            await Promise.all([refetchInvoices(), refetchDistributors()]);
+            // Update the selected distributor with fresh data
+            if (selectedDistributor) {
+                
+                const updatedDistributorsData = await fetchWithAuth(`distributors/?search=${searchQuery}`);
+                const updatedDistributor = updatedDistributorsData?.data.results?.find(d => d.id === selectedDistributor.id);
+                if (updatedDistributor) {
+                    setSelectedDistributor(updatedDistributor);
+                }
+            }
+            setIsInvoiceModalOpen(false);
+        },
+    });
+
+    const toggleStatusMutation = useCreateUpdateMutation({
+        url: (data) => {
+            try {
+                const parsedData = typeof data === 'string' ? JSON.parse(data) : data;
+                return `distributors/${parsedData.id}/`;
+            } catch (error) {
+                console.error('Error parsing data for URL:', error);
+                return 'distributors/';
+            }
+        },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        fetchFunction: fetchWithAuth,
+        onSuccessMessage: 'Distributor status updated',
+        onErrorMessage: 'Failed to update status',
+        onSuccess: async () => {
+            await refetchDistributors();
+            // Update selected distributor
+            if (selectedDistributor?.id) {
+                setSelectedDistributor(prev => ({ ...prev, is_active: !prev.is_active }));
+            }
+        },
+    });
+
+    const distributors = distributorsData?.results || [];
+    const invoices = invoicesData?.results || [];
+
+    const handleAddDistributor = (formData) => {
+        addDistributorMutation.mutate(JSON.stringify(formData));
+    };
+
+    const handleCreateInvoice = (payload) => {
+        createInvoiceMutation.mutate(JSON.stringify(payload));
+    };
+
+    const handleToggleActive = () => {
+        if (!selectedDistributor) return;
+        toggleStatusMutation.mutate(JSON.stringify({
+            id: selectedDistributor.id,
+            is_active: !selectedDistributor.is_active
+        }));
+    };
+
+    const handleSelectDistributor = (distributor) => {
+        setSelectedDistributor(distributor);
+        setInvoicePage(1);
+    };
+
+    const handleTabChange = (tab) => {
+        setActiveTab(tab);
+        setInvoicePage(1);
+    };
+
+    const handleInvoiceClick = async (invoice) => {
+        // If it's a payment, fetch and show the parent sale invoice
+        if (invoice.transaction_type === 'payment' && invoice.related_invoice) {
+            try {
+                const parentInvoice = await fetchWithAuth(`distributors/invoices/${invoice.related_invoice}/`);
+                setSelectedInvoice(parentInvoice);
+                setIsDetailsModalOpen(true);
+            } catch (error) {
+                console.error('Failed to fetch parent invoice:', error);
+                // Fallback to showing the payment invoice
+                setSelectedInvoice(invoice);
+                setIsDetailsModalOpen(true);
+            }
+        } else {
+            setSelectedInvoice(invoice);
+            setIsDetailsModalOpen(true);
+        }
     };
 
     return (
-        <div className="flex-1 overflow-y-auto">
-            <header className="flex items-center justify-between whitespace-nowrap border-b border-solid border-eva-border px-8 py-4 bg-eva-white dark:bg-background-dark dark:border-gray-700">
-                <div className="flex flex-wrap justify-between gap-3">
-                    <p className="text-eva-text dark:text-gray-100 text-2xl font-bold leading-tight tracking-[-0.02em]">Distributor Management</p>
-                </div>
-                <div className="flex items-center gap-4">
-                    <button className="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 bg-eva-off-white text-gray-600 dark:bg-gray-800 dark:text-gray-300 gap-2 text-sm font-bold leading-normal tracking-[0.015em] min-w-0 px-2.5">
-                        <span className="material-symbols-outlined">notifications</span>
-                    </button>
-                    <button className="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 bg-eva-off-white text-gray-600 dark:bg-gray-800 dark:text-gray-300 gap-2 text-sm font-bold leading-normal tracking-[0.015em] min-w-0 px-2.5">
-                        <span className="material-symbols-outlined">settings</span>
-                    </button>
-                    <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10" style={{ backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuCV_yp8agTHfWThTwGd7RMhpVFyTUSPX588QBau4OYx_nc09i8fQDsmyFpYfBwmSYJVMskApEENGuT-befqJGysDCm4I8lT0sBA6YfU04TnceHVnej4MXnmEHIpbuLT3dH_vWv74hTrkjkZDqdD4CA_mYU_urZVT8gp4ZFURKCEhlPjPtnSrxXLNpu5aAuYYHHYYiAcP5tkhQVrcSnXF5FCa7CMQ-_ur51ViNeluQW45aC-iRjTT28P3it9I1ws85CCqe7w9EQPU806")' }}></div>
-                </div>
+        <div className="flex-1 overflow-y-auto p-8 xl:p-10">
+            <header className="flex items-center justify-between mb-8">
+                <h1 className="text-slate-900 dark:text-white text-3xl font-black tracking-tight">Distributor Management</h1>
+                <button
+                    onClick={() => setIsAddModalOpen(true)}
+                    className="flex items-center gap-2 h-10 px-4 text-sm font-bold text-white rounded-lg bg-eva-blue hover:bg-blue-800 transition-colors"
+                >
+                    <span className="material-symbols-outlined text-base">add</span>
+                    <span>Add Distributor</span>
+                </button>
             </header>
-            <div className="grid grid-cols-12 gap-6 p-8">
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Left Column: Distributor List */}
-                <div className="col-span-12 lg:col-span-5 flex flex-col gap-4">
-                    <div className="bg-eva-white p-4 rounded-lg border border-eva-border dark:bg-gray-900 dark:border-gray-700">
-                        <label className="flex flex-col min-w-40 h-12 w-full">
-                            <div className="flex w-full flex-1 items-stretch rounded-lg h-full">
-                                <div className="text-gray-500 dark:text-gray-400 flex bg-eva-off-white dark:bg-gray-800 items-center justify-center pl-4 rounded-l-lg border-r-0">
-                                    <span className="material-symbols-outlined">search</span>
-                                </div>
-                                <input
-                                    className="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-eva-text dark:text-gray-200 focus:outline-0 focus:ring-2 focus:ring-eva-blue/50 border-none bg-eva-off-white dark:bg-gray-800 h-full placeholder:text-gray-500 dark:placeholder:text-gray-400 px-4 rounded-l-none border-l-0 pl-2 text-sm font-normal leading-normal"
-                                    placeholder="Search by Distributor Name or Area..." defaultValue=""
-                                />
-                            </div>
-                        </label>
+                <div className="lg:col-span-1 flex flex-col gap-4">
+                    <div className="bg-white dark:bg-background-dark p-4 rounded-lg border border-slate-200 dark:border-gray-700">
+                        <div className="relative">
+                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">search</span>
+                            <input
+                                className="w-full rounded-lg pl-10 h-10 bg-eva-off-white border-none dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-eva-blue outline-none text-sm"
+                                placeholder="Search distributors..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
                     </div>
-                    <div className="bg-eva-white rounded-lg border border-eva-border dark:bg-gray-900 dark:border-gray-700 overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead className="border-b border-eva-border dark:border-gray-700">
-                                <tr>
-                                    <th className="px-4 py-3 text-eva-text dark:text-gray-300 text-xs font-medium uppercase tracking-wider">Distributor Name</th>
-                                    <th className="px-4 py-3 text-eva-text dark:text-gray-300 text-xs font-medium uppercase tracking-wider">Area</th>
-                                    <th className="px-4 py-3 text-right text-eva-text dark:text-gray-300 text-xs font-medium uppercase tracking-wider">Balance</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr className="border-b border-eva-border dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer">
-                                    <td className="px-4 py-3 text-eva-text dark:text-gray-200 text-sm font-medium">AquaPure Inc.</td>
-                                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-sm">North District</td>
-                                    <td className="px-4 py-3 text-right text-eva-debit dark:text-eva-debit text-sm font-mono">-$12,500.00</td>
-                                </tr>
-                                <tr className="border-b border-eva-border dark:border-gray-800 bg-eva-blue/10 dark:bg-eva-blue/20 cursor-pointer">
-                                    <td className="px-4 py-3 text-eva-blue dark:text-sky-300 text-sm font-medium">Beverage Co.</td>
-                                    <td className="px-4 py-3 text-eva-blue/80 dark:text-sky-300/80 text-sm">South Bay</td>
-                                    <td className="px-4 py-3 text-right text-eva-credit dark:text-eva-credit text-sm font-mono">$5,000.00</td>
-                                </tr>
-                                <tr className="border-b border-eva-border dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer">
-                                    <td className="px-4 py-3 text-eva-text dark:text-gray-200 text-sm font-medium">Crystal Water LLC</td>
-                                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-sm">East Metro</td>
-                                    <td className="px-4 py-3 text-right text-eva-debit dark:text-eva-debit text-sm font-mono">-$3,200.00</td>
-                                </tr>
-                                <tr className="border-b border-eva-border dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer">
-                                    <td className="px-4 py-3 text-eva-text dark:text-gray-200 text-sm font-medium">DrinkWell Group</td>
-                                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-sm">West End</td>
-                                    <td className="px-4 py-3 text-right text-eva-credit dark:text-eva-credit text-sm font-mono">$22,000.00</td>
-                                </tr>
-                                <tr className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer">
-                                    <td className="px-4 py-3 text-eva-text dark:text-gray-200 text-sm font-medium">FreshFlow Distributors</td>
-                                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-sm">Central City</td>
-                                    <td className="px-4 py-3 text-right text-eva-debit dark:text-eva-debit text-sm font-mono">-$8,800.00</td>
-                                </tr>
-                            </tbody>
-                        </table>
+
+                    <div className="bg-white dark:bg-background-dark rounded-lg border border-slate-200 dark:border-gray-700 overflow-hidden">
+                        {loadingDistributors ? (
+                            <div className="p-8 flex items-center justify-center">
+                                <LoadingSpinner />
+                            </div>
+                        ) : distributors.length === 0 ? (
+                            <div className="p-8 text-center text-slate-400">
+                                <span className="material-symbols-outlined text-4xl mb-2">person_off</span>
+                                <p>No distributors found</p>
+                            </div>
+                        ) : (
+                            <table className="w-full text-left">
+                                <thead className="border-b border-slate-200 dark:border-gray-700">
+                                    <tr>
+                                        <th className="px-4 py-3 text-slate-700 dark:text-gray-300 text-xs font-medium uppercase">Name</th>
+                                        <th className="px-4 py-3 text-slate-700 dark:text-gray-300 text-xs font-medium uppercase">Area</th>
+                                        <th className="px-4 py-3 text-right text-slate-700 dark:text-gray-300 text-xs font-medium uppercase">Balance</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {distributors.map((distributor) => (
+                                        <tr
+                                            key={distributor.id}
+                                            onClick={() => handleSelectDistributor(distributor)}
+                                            className={`border-b border-slate-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-colors ${selectedDistributor?.id === distributor.id ? 'bg-eva-blue/10 dark:bg-eva-blue/20' : ''
+                                                }`}
+                                        >
+                                            <td className="px-4 py-3 text-slate-900 dark:text-gray-200 text-sm font-medium">{distributor.name}</td>
+                                            <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-sm">{distributor.area}</td>
+                                            <td className={`px-4 py-3 text-right text-sm font-mono ${parseFloat(distributor.balance) < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'
+                                                }`}>
+                                                Rs. {parseFloat(distributor.balance).toFixed(2)}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        )}
                     </div>
                 </div>
+
                 {/* Right Column: Distributor Details */}
-                <div className="col-span-12 lg:col-span-7 flex flex-col gap-6">
-                    <div className="bg-eva-white p-6 rounded-lg border border-eva-border dark:bg-gray-900 dark:border-gray-700">
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <div className="flex items-center gap-3">
-                                    <h2 className="text-2xl font-bold text-eva-text dark:text-gray-100">Beverage Co.</h2>
-                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-eva-credit dark:bg-green-900 dark:text-green-300">Active</span>
+                <div className="lg:col-span-2 flex flex-col gap-6">
+                    {!selectedDistributor ? (
+                        <div className="bg-white dark:bg-background-dark p-12 rounded-lg border border-slate-200 dark:border-gray-700 flex flex-col items-center justify-center text-center">
+                            <span className="material-symbols-outlined text-6xl text-slate-300 dark:text-slate-600 mb-4">person_search</span>
+                            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Select a Distributor</h3>
+                            <p className="text-slate-500 dark:text-slate-400">Choose a distributor from the list to view details and invoices</p>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Distributor Info Card */}
+                            <div className="bg-white dark:bg-background-dark p-6 rounded-lg border border-slate-200 dark:border-gray-700">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{selectedDistributor.name}</h2>
+                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${selectedDistributor.is_active ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' : 'bg-red-100 text-red-800'
+                                                }`}>
+                                                {selectedDistributor.is_active ? 'Active' : 'Inactive'}
+                                            </span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4 mt-4 text-sm">
+                                            <div>
+                                                <p className="text-slate-500 dark:text-slate-400">Area</p>
+                                                <p className="font-medium text-slate-900 dark:text-white">{selectedDistributor.area}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-slate-500 dark:text-slate-400">Contact</p>
+                                                <p className="font-medium text-slate-900 dark:text-white">{selectedDistributor.contact_no}</p>
+                                            </div>
+                                            {selectedDistributor.email && (
+                                                <div>
+                                                    <p className="text-slate-500 dark:text-slate-400">Email</p>
+                                                    <p className="font-medium text-slate-900 dark:text-white">{selectedDistributor.email}</p>
+                                                </div>
+                                            )}
+                                            <div>
+                                                <p className="text-slate-500 dark:text-slate-400">Address</p>
+                                                <p className="font-medium text-slate-900 dark:text-white">{selectedDistributor.address}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Current Balance</p>
+                                        <p className={`text-3xl font-bold ${parseFloat(selectedDistributor.balance) < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'
+                                            }`}>
+                                            Rs. {Math.abs(parseFloat(selectedDistributor.balance)).toFixed(2)}
+                                        </p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                            {parseFloat(selectedDistributor.balance) < 0 ? 'They Owe Us' : 'We Owe Them'}
+                                        </p>
+                                    </div>
                                 </div>
-                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">ID: EVA-DIST-002</p>
-                            </div>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={handleCreateInvoiceClick}
-                                    className="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-eva-off-white dark:bg-gray-800 text-eva-text dark:text-gray-200 text-sm font-bold leading-normal tracking-[0.015em] gap-2"
-                                >
-                                    <span className="material-symbols-outlined text-base">receipt</span>
-                                    <span className="truncate">Create Invoice</span>
-                                </button>
-                                <button className="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-eva-blue text-white text-sm font-bold leading-normal tracking-[0.015em] gap-2">
-                                    <span className="material-symbols-outlined text-base">payments</span>
-                                    <span className="truncate">Receive Payment</span>
-                                </button>
-                            </div>
-                        </div>
-                        <div className="border-t border-eva-border dark:border-gray-700 mt-6 pt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                            <div>
-                                <p className="text-gray-500 dark:text-gray-400">Total Investment</p>
-                                <p className="font-semibold text-eva-text dark:text-gray-200 mt-1">$250,000</p>
-                            </div>
-                            <div>
-                                <p className="text-gray-500 dark:text-gray-400">Contract Time</p>
-                                <p className="font-semibold text-eva-text dark:text-gray-200 mt-1">3 years</p>
-                            </div>
-                            <div>
-                                <p className="text-gray-500 dark:text-gray-400">Contract End</p>
-                                <p className="font-semibold text-eva-text dark:text-gray-200 mt-1">2026-08-15</p>
-                            </div>
-                            <div>
-                                <p className="text-gray-500 dark:text-gray-400">Current Balance</p>
-                                <p className="font-semibold text-eva-credit dark:text-eva-credit mt-1">$5,000.00</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="bg-eva-white rounded-lg border border-eva-border dark:bg-gray-900 dark:border-gray-700">
-                        <div className="border-b border-eva-border dark:border-gray-700">
-                            <nav aria-label="Tabs" className="flex -mb-px px-6">
-                                {['history', 'details', 'contracts'].map((tab) => (
+                                <div className="mt-6 flex gap-3">
                                     <button
-                                        key={tab}
-                                        onClick={() => setActiveTab(tab)}
-                                        className={clsx(
-                                            "whitespace-nowrap py-4 px-4 border-b-2 font-medium text-sm capitalize",
-                                            activeTab === tab
-                                                ? "border-eva-blue text-eva-blue"
-                                                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:border-gray-600"
-                                        )}
+                                        onClick={() => setIsInvoiceModalOpen(true)}
+                                        className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-eva-blue rounded-lg hover:bg-blue-800 transition-colors"
                                     >
-                                        {tab === 'history' ? 'Transaction History' : tab}
+                                        <span className="material-symbols-outlined text-base">receipt_long</span>
+                                        Create Invoice
                                     </button>
-                                ))}
-                            </nav>
-                        </div>
-
-                        {/* Transaction History Content */}
-                        {activeTab === 'history' && (
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
-                                    <thead>
-                                        <tr className="bg-eva-off-white dark:bg-gray-800">
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Transaction</th>
-                                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Debit</th>
-                                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Credit</th>
-                                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Balance</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-eva-border dark:divide-gray-700">
-                                        <tr>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">2023-10-26</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-eva-text dark:text-gray-200">
-                                                <div>Payment Received</div>
-                                                <div className="text-xs text-gray-400">#PMT-0451</div>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-mono text-gray-500 dark:text-gray-400">-</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-mono text-eva-credit dark:text-eva-credit">$10,000.00</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-mono text-eva-credit dark:text-eva-credit">$5,000.00</td>
-                                        </tr>
-                                        {/* ... other rows ... */}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-
-                        {/* Details Content */}
-                        {activeTab === 'details' && (
-                            <div className="p-6">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div>
-                                        <h4 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-4">Company Information</h4>
-                                        <div className="space-y-3">
-                                            <div>
-                                                <p className="text-xs text-gray-500 dark:text-gray-400">Registered Address</p>
-                                                <p className="text-sm text-gray-900 dark:text-white">123 Business Park, South Bay, CA 90210</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-gray-500 dark:text-gray-400">Tax ID / EIN</p>
-                                                <p className="text-sm text-gray-900 dark:text-white">99-1234567</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-gray-500 dark:text-gray-400">Business License</p>
-                                                <p className="text-sm text-gray-900 dark:text-white">BL-2023-8892</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-4">Contact Person</h4>
-                                        <div className="space-y-3">
-                                            <div>
-                                                <p className="text-xs text-gray-500 dark:text-gray-400">Name</p>
-                                                <p className="text-sm text-gray-900 dark:text-white">Robert Fox</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-gray-500 dark:text-gray-400">Role</p>
-                                                <p className="text-sm text-gray-900 dark:text-white">Procurement Manager</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-gray-500 dark:text-gray-400">Email</p>
-                                                <p className="text-sm text-gray-900 dark:text-white">robert.fox@beverageco.com</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-gray-500 dark:text-gray-400">Phone</p>
-                                                <p className="text-sm text-gray-900 dark:text-white">+1 (555) 987-6543</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="md:col-span-2">
-                                        <h4 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-4">Bank Details</h4>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                            <div>
-                                                <p className="text-xs text-gray-500 dark:text-gray-400">Bank Name</p>
-                                                <p className="text-sm text-gray-900 dark:text-white">Chase Bank</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-gray-500 dark:text-gray-400">Account Number</p>
-                                                <p className="text-sm text-gray-900 dark:text-white">**** **** **** 4589</p>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    {isAdmin && (
+                                        <button
+                                            onClick={handleToggleActive}
+                                            disabled={toggleStatusMutation.isPending}
+                                            className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-lg transition-colors border ${selectedDistributor.is_active
+                                                ? 'text-red-600 border-red-200 hover:bg-red-50 dark:hover:bg-red-900/20'
+                                                : 'text-green-600 border-green-200 hover:bg-green-50 dark:hover:bg-green-900/20'
+                                                }`}
+                                        >
+                                            <span className="material-symbols-outlined text-base">
+                                                {selectedDistributor.is_active ? 'block' : 'check_circle'}
+                                            </span>
+                                            {selectedDistributor.is_active ? 'Deactivate' : 'Activate'}
+                                        </button>
+                                    )}
                                 </div>
                             </div>
-                        )}
 
-                        {/* Contracts Content */}
-                        {activeTab === 'contracts' && (
-                            <div className="p-6">
-                                <div className="bg-eva-off-white dark:bg-gray-800 rounded-lg p-4 mb-6 border border-eva-border dark:border-gray-700">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Standard Distribution Agreement</h3>
-                                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Ref: CTR-2023-002</p>
-                                        </div>
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">Active</span>
-                                    </div>
-                                    <div className="grid grid-cols-3 gap-4 mt-4 text-sm">
-                                        <div>
-                                            <p className="text-gray-500 dark:text-gray-400">Start Date</p>
-                                            <p className="font-medium text-gray-900 dark:text-white">Aug 15, 2023</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-gray-500 dark:text-gray-400">End Date</p>
-                                            <p className="font-medium text-gray-900 dark:text-white">Aug 15, 2026</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-gray-500 dark:text-gray-400">Renewal Type</p>
-                                            <p className="font-medium text-gray-900 dark:text-white">Automatic (1 Year)</p>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div>
-                                    <h4 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-3">Terms & Conditions</h4>
-                                    <div className="h-48 overflow-y-auto bg-white dark:bg-gray-900 border border-eva-border dark:border-gray-700 rounded-lg p-4 text-sm text-gray-600 dark:text-gray-300 space-y-2">
-                                        <p>1. <strong>Exclusivity:</strong> The Distributor is granted non-exclusive rights to distribute the Products in the Territory.</p>
-                                        <p>2. <strong>Pricing:</strong> Prices are subject to change with 30 days prior written notice.</p>
-                                        <p>3. <strong>Payment Terms:</strong> Net 30 days from the date of invoice. Late payments shall incur interest at 1.5% per month.</p>
-                                        <p>4. <strong>Minimum Order Quantity (MOQ):</strong> The Distributor agrees to a minimum order of 500 units per month.</p>
-                                        <p>5. <strong>Termination:</strong> Either party may terminate this agreement with 90 days written notice.</p>
-                                        <p>6. <strong>Confidentiality:</strong> Both parties agree to maintain the confidentiality of proprietary information.</p>
+                            {/* Invoices Section */}
+                            <div className="bg-white dark:bg-background-dark rounded-lg border border-slate-200 dark:border-gray-700">
+                                <div className="border-b border-slate-200 dark:border-gray-700">
+                                    <div className="flex gap-4 px-6">
+                                        <button
+                                            onClick={() => handleTabChange('history')}
+                                            className={`py-4 px-2 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'history'
+                                                ? 'border-eva-blue text-eva-blue'
+                                                : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
+                                                }`}
+                                        >
+                                            All Transactions
+                                        </button>
+                                        <button
+                                            onClick={() => handleTabChange('sales')}
+                                            className={`py-4 px-2 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'sales'
+                                                ? 'border-eva-blue text-eva-blue'
+                                                : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
+                                                }`}
+                                        >
+                                            Sales
+                                        </button>
+                                        <button
+                                            onClick={() => handleTabChange('payments')}
+                                            className={`py-4 px-2 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'payments'
+                                                ? 'border-eva-blue text-eva-blue'
+                                                : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
+                                                }`}
+                                        >
+                                            Payments
+                                        </button>
                                     </div>
                                 </div>
-                                <div className="mt-6 flex justify-end">
-                                    <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-eva-blue text-white text-sm font-bold hover:bg-blue-700 transition-colors">
-                                        <span className="material-symbols-outlined text-base">download</span>
-                                        Download Contract PDF
-                                    </button>
+
+                                <div className="p-6">
+                                    {loadingInvoices ? (
+                                        <div className="py-12 flex items-center justify-center">
+                                            <LoadingSpinner />
+                                        </div>
+                                    ) : (
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-left text-sm">
+                                                <thead className="bg-slate-50 dark:bg-gray-800 border-b border-slate-200 dark:border-gray-700">
+                                                    <tr>
+                                                        <th className="px-4 py-3 text-xs font-medium uppercase text-slate-700 dark:text-gray-300">Invoice #</th>
+                                                        <th className="px-4 py-3 text-xs font-medium uppercase text-slate-700 dark:text-gray-300">Date</th>
+                                                        <th className="px-4 py-3 text-xs font-medium uppercase text-slate-700 dark:text-gray-300">Type</th>
+                                                        <th className="px-4 py-3 text-xs font-medium uppercase text-slate-700 dark:text-gray-300 text-right">Total</th>
+                                                        <th className="px-4 py-3 text-xs font-medium uppercase text-slate-700 dark:text-gray-300 text-right">Paid</th>
+                                                        <th className="px-4 py-3 text-xs font-medium uppercase text-slate-700 dark:text-gray-300 text-right">Due</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {invoices.length === 0 ? (
+                                                        <tr>
+                                                            <td colSpan="6" className="px-4 py-12 text-center text-slate-400">
+                                                                No invoices found
+                                                            </td>
+                                                        </tr>
+                                                    ) : (
+                                                        invoices.map((invoice) => (
+                                                            <tr
+                                                                key={invoice.id}
+                                                                onClick={() => handleInvoiceClick(invoice)}
+                                                                className="border-b border-slate-200 dark:border-gray-700 hover:bg-slate-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer group"
+                                                            >
+                                                                <td className="px-4 py-3">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="font-mono text-xs text-eva-blue font-medium group-hover:underline">{invoice.invoice_number}</span>
+                                                                        {invoice.transaction_type === 'payment' && invoice.related_invoice_number && (
+                                                                            <span className="text-xs text-slate-500 dark:text-slate-400">→ {invoice.related_invoice_number}</span>
+                                                                        )}
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-4 py-3 text-slate-500 dark:text-gray-400">{new Date(invoice.created_at).toLocaleDateString()}</td>
+                                                                <td className="px-4 py-3">
+                                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${invoice.transaction_type === 'sale'
+                                                                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300'
+                                                                        : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
+                                                                        }`}>
+                                                                        {invoice.transaction_type === 'sale' ? 'Sale' : 'Payment'} - {invoice.payment_type}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-4 py-3 text-right font-mono text-slate-900 dark:text-white">Rs. {parseFloat(invoice.total_amount).toFixed(2)}</td>
+                                                                <td className="px-4 py-3 text-right font-mono text-green-600 dark:text-green-400">Rs. {parseFloat(invoice.amount_paid).toFixed(2)}</td>
+                                                                <td className="px-4 py-3 text-right font-mono text-red-600 dark:text-red-400">Rs. {parseFloat(invoice.balance_due).toFixed(2)}</td>
+                                                            </tr>
+                                                        ))
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+
+                                    {/* Pagination Controls */}
+                                    {!loadingInvoices && invoicesData && invoicesData.count > 0 && (
+                                        <div className="mt-4 flex items-center justify-between px-4">
+                                            <div className="text-sm text-slate-500 dark:text-slate-400">
+                                                Showing {((invoicePage - 1) * 5) + 1} to {Math.min(invoicePage * 5, invoicesData.count)} of {invoicesData.count} invoices
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => setInvoicePage(p => Math.max(1, p - 1))}
+                                                    disabled={!invoicesData.previous}
+                                                    className="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                    title="Previous page"
+                                                >
+                                                    <span className="material-symbols-outlined text-base">chevron_left</span>
+                                                </button>
+                                                <div className="flex items-center px-3 text-sm font-medium text-slate-700 dark:text-slate-300">
+                                                    Page {invoicePage} of {Math.ceil(invoicesData.count / 5)}
+                                                </div>
+                                                <button
+                                                    onClick={() => setInvoicePage(p => p + 1)}
+                                                    disabled={!invoicesData.next}
+                                                    className="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                    title="Next page"
+                                                >
+                                                    <span className="material-symbols-outlined text-base">chevron_right</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
-                        )}
-                    </div>
+                        </>
+                    )}
                 </div>
             </div>
 
-            {/* Create Invoice Modal */}
-            {isInvoiceModalOpen && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-800">
-                        <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
-                            <h3 className="text-xl font-bold text-slate-900 dark:text-white">Create Invoice</h3>
-                            <button onClick={() => setIsInvoiceModalOpen(false)} className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
-                                <span className="material-symbols-outlined">close</span>
-                            </button>
-                        </div>
-                        <div className="p-6 space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Distributor</label>
-                                <select className="w-full rounded-lg border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-primary focus:border-primary">
-                                    <option>Beverage Co.</option>
-                                    <option>AquaPure Inc.</option>
-                                    <option>Crystal Water LLC</option>
-                                    <option>DrinkWell Group</option>
-                                    <option>FreshFlow Distributors</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Invoice Date</label>
-                                <input type="date" className="w-full rounded-lg border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-primary focus:border-primary" />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Items</label>
-                                <textarea className="w-full rounded-lg border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-primary focus:border-primary" rows="3" placeholder="List items here..."></textarea>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Total Amount</label>
-                                    <input type="number" className="w-full rounded-lg border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-primary focus:border-primary" placeholder="0.00" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Payment Terms</label>
-                                    <select className="w-full rounded-lg border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-primary focus:border-primary">
-                                        <option>Net 30</option>
-                                        <option>Net 60</option>
-                                        <option>Immediate</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="p-6 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-3">
-                            <button onClick={() => setIsInvoiceModalOpen(false)} className="px-4 py-2 rounded-lg text-sm font-semibold bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200">Cancel</button>
-                            <button onClick={handleConfirmInvoice} className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary hover:bg-primary/90 text-white">Create Invoice</button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <AddDistributorModal
+                isOpen={isAddModalOpen}
+                onClose={() => setIsAddModalOpen(false)}
+                onSave={handleAddDistributor}
+            />
+
+            <CreateInvoiceModal
+                isOpen={isInvoiceModalOpen}
+                onClose={() => setIsInvoiceModalOpen(false)}
+                onSubmit={handleCreateInvoice}
+                distributor={selectedDistributor}
+            />
+
+            <InvoiceDetailsModal
+                isOpen={isDetailsModalOpen}
+                onClose={() => setIsDetailsModalOpen(false)}
+                invoice={selectedInvoice}
+            />
         </div>
     );
 };

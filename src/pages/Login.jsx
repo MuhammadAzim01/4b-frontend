@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 import { validateField, hasNoFieldErrors } from '../utils/validations';
 import { useCreateUpdateMutation } from '../hooks/useCreateUpdateMutation';
@@ -18,10 +19,10 @@ export default function Login() {
     const [passwordVisible, setPasswordVisible] = useState(false);
     const [inputErrors, setInputErrors] = useState({});
 
-    const { mutate: login, isSuccess, isError, data, error } = useCreateUpdateMutation({
+    const { mutate: login, isPending, isSuccess, isError, data, error } = useCreateUpdateMutation({
         url: 'auth/login/',
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: { 'Content-Type': 'application/json' },
         fetchFunction: fetchApi,
         onSuccessMessage: 'Logged in successfully.',
         onErrorMessage: 'Login failed'
@@ -46,7 +47,7 @@ export default function Login() {
         const { username, password } = loginDetails;
 
         if (hasNoFieldErrors(inputErrors)) {
-            login(JSON.stringify({username, password}));
+            login(JSON.stringify({ username, password }));
         }
     };
 
@@ -137,8 +138,18 @@ export default function Login() {
                         </div>
                     )}
                 </div>
-                <Button type="submit" className="w-full mt-2">Login</Button>
-            </form>
-        </div>
+
+                <Button type="submit" className="w-full mt-2" disabled={isPending}>
+                    {isPending ? (
+                        <div className="flex items-center gap-2">
+                            <LoadingSpinner size="sm" className="text-white" />
+                            <span>Logging in...</span>
+                        </div>
+                    ) : (
+                        "Login"
+                    )}
+                </Button>
+            </form >
+        </div >
     );
 }

@@ -1,0 +1,560 @@
+import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
+import { fetchWithAuth } from '../utils/fetchApis';
+import ConfirmDialog from '../components/ConfirmDialog';
+import ExpenseDetailModal from '../components/ExpenseDetailModal';
+
+const DEFAULT_CATEGORIES = [
+    { id: 'rent', name: 'Rent', icon: 'home' },
+    { id: 'electricity', name: 'Electricity', icon: 'bolt' },
+    { id: 'water', name: 'Water', icon: 'water_drop' },
+    { id: 'salary', name: 'Salary', icon: 'badge' },
+    { id: 'maintenance', name: 'Maintenance', icon: 'build' },
+    { id: 'transport', name: 'Transport', icon: 'local_shipping' },
+    { id: 'food', name: 'Food & Beverage', icon: 'restaurant' },
+    { id: 'marketing', name: 'Marketing', icon: 'campaign' },
+    { id: 'other', name: 'Other', icon: 'receipt' },
+];
+
+const Expenses = () => {
+    // State
+    const [expenses, setExpenses] = useState([]);
+    const [categories, setCategories] = useState([]);
+    const [filterDate, setFilterDate] = useState('all'); // all, today, month
+    const [filterCategory, setFilterCategory] = useState('all');
+    const [loading, setLoading] = useState(true);
+
+    // Form State
+    const [amount, setAmount] = useState('');
+    const [category, setCategory] = useState('');
+    const [description, setDescription] = useState('');
+    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+
+    // Category State
+    const [isAddingCategory, setIsAddingCategory] = useState(false);
+    const [newCategoryName, setNewCategoryName] = useState('');
+    const [newCategoryIcon, setNewCategoryIcon] = useState('receipt');
+
+    // Confirmation dialog state
+    const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+    const [pendingExpense, setPendingExpense] = useState(null);
+
+    // Detail Modal State
+    const [selectedExpense, setSelectedExpense] = useState(null);
+    const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+
+    // Load data on mount
+    useEffect(() => {
+        fetchData();
+    }, []);
+
+    const fetchData = async () => {
+        setLoading(true);
+        try {
+            // Fetch categories
+            const categoriesResponse = await fetchWithAuth('expenses/categories/');
+            let fetchedCategories = categoriesResponse.data.results || categoriesResponse.data;
+
+            // If no categories exist, create default ones
+            if (fetchedCategories.length === 0) {
+                await createDefaultCategories();
+                const newCategoriesResponse = await fetchWithAuth('expenses/categories/');
+                fetchedCategories = newCategoriesResponse.data.results || newCategoriesResponse.data;
+            }
+
+            // Sort categories to put 'Other' at the bottom
+            fetchedCategories.sort((a, b) => {
+                if (a.id === 'other' || a.name.toLowerCase() === 'other') return 1;
+                if (b.id === 'other' || b.name.toLowerCase() === 'other') return -1;
+                return 0;
+            });
+
+            setCategories(fetchedCategories);
+
+            // Set default category
+            const defaultCat = fetchedCategories.find(c => c.name.toLowerCase() === 'other') || fetchedCategories[0];
+            if (defaultCat) setCategory(defaultCat.id);
+
+            // Fetch expenses
+            await fetchExpenses();
+        } catch (error) {
+            console.error('Error fetching data:', error);
+            toast.error('Failed to load data');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const createDefaultCategories = async () => {
+        try {
+            const promises = DEFAULT_CATEGORIES.map(cat =>
+                fetchWithAuth('expenses/categories/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(cat)
+                })
+            );
+            await Promise.all(promises);
+        } catch (error) {
+            console.error('Error creating default categories:', error);
+        }
+    };
+
+    const fetchExpenses = async () => {
+        try {
+            const response = await fetchWithAuth('expenses/');
+            setExpenses(response.data.results || response.data);
+        } catch (error) {
+            console.error('Error fetching expenses:', error);
+            toast.error('Failed to load expenses');
+        }
+    };
+
+    // Derived Data
+    const filteredExpenses = expenses.filter(expense => {
+        const expenseDate = new Date(expense.date);
+        const today = new Date();
+        const isToday = expenseDate.toDateString() === today.toDateString();
+        const isThisMonth = expenseDate.getMonth() === today.getMonth() && expenseDate.getFullYear() === today.getFullYear();
+
+        let dateMatch = true;
+        if (filterDate === 'today') dateMatch = isToday;
+        if (filterDate === 'month') dateMatch = isThisMonth;
+
+        let categoryMatch = true;
+        if (filterCategory !== 'all') categoryMatch = expense.category === parseInt(filterCategory);
+
+        return dateMatch && categoryMatch;
+    }).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    const totalToday = expenses
+        .filter(e => new Date(e.date).toDateString() === new Date().toDateString())
+        .reduce((sum, e) => sum + parseFloat(e.amount), 0);
+
+    const totalMonth = expenses
+        .filter(e => {
+            const d = new Date(e.date);
+            const today = new Date();
+            return d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
+        })
+        .reduce((sum, e) => sum + parseFloat(e.amount), 0);
+
+    const totalYear = expenses
+        .filter(e => new Date(e.date).getFullYear() === new Date().getFullYear())
+        .reduce((sum, e) => sum + parseFloat(e.amount), 0);
+
+    // Handlers
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!amount || !description || !category) return;
+
+        // Get category name for confirmation message
+        const selectedCategory = categories.find(c => c.id === parseInt(category));
+        const categoryName = selectedCategory?.name || 'Unknown';
+
+        // Set pending expense and show confirmation dialog
+        setPendingExpense({
+            amount: parseFloat(amount),
+            category: parseInt(category),
+            categoryName,
+            description,
+            date,
+        });
+        setShowConfirmDialog(true);
+    };
+
+    const handleConfirmExpense = async () => {
+        if (!pendingExpense) return;
+
+        try {
+            const payload = {
+                amount: pendingExpense.amount,
+                category: pendingExpense.category,
+                description: pendingExpense.description,
+                date: pendingExpense.date,
+            };
+
+            const response = await fetchWithAuth('expenses/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            setExpenses([response.data, ...expenses]);
+            toast.success('Expense added successfully');
+
+            // Reset form
+            setAmount('');
+            setDescription('');
+            setPendingExpense(null);
+        } catch (error) {
+            console.error('Error adding expense:', error);
+            toast.error(error.message || 'Failed to add expense');
+        }
+    };
+
+    const handleAddCategory = async (e) => {
+        e.preventDefault();
+        if (!newCategoryName) return;
+
+        // Check duplicates
+        if (categories.some(c => c.name.toLowerCase() === newCategoryName.toLowerCase())) {
+            toast.error('Category with this name already exists');
+            return;
+        }
+
+        try {
+            const response = await fetchWithAuth('expenses/categories/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: newCategoryName,
+                    icon: newCategoryIcon
+                })
+            });
+
+            // Maintain sorting when adding new category
+            const updatedCategories = [...categories, response.data].sort((a, b) => {
+                if (a.id === 'other' || a.name.toLowerCase() === 'other') return 1;
+                if (b.id === 'other' || b.name.toLowerCase() === 'other') return -1;
+                return 0;
+            });
+
+            setCategories(updatedCategories);
+            setNewCategoryName('');
+            setNewCategoryIcon('receipt');
+            setIsAddingCategory(false);
+            toast.success('Category added');
+        } catch (error) {
+            console.error('Error adding category:', error);
+            toast.error(error.message || 'Failed to add category');
+        }
+    };
+
+    const handleDeleteCategory = async (catId, e) => {
+        e.stopPropagation();
+        e.preventDefault();
+
+        const categoryToDelete = categories.find(c => c.id === catId);
+        // Prevent deleting default categories OR 'other' category specifically
+        if (categoryToDelete?.is_default || categoryToDelete?.id === 'other' || categoryToDelete?.name.toLowerCase() === 'other') {
+            toast.error("Cannot remove this category");
+            return;
+        }
+
+        if (!confirm(`Remove category? This won't delete past expenses.`)) return;
+
+        try {
+            await fetchWithAuth(`expenses/categories/${catId}/`, {
+                method: 'DELETE'
+            });
+
+            setCategories(categories.filter(c => c.id !== catId));
+            if (category === catId) {
+                const defaultCat = categories.find(c => c.name.toLowerCase() === 'other') || categories[0];
+                setCategory(defaultCat?.id || '');
+            }
+            toast.success('Category deleted');
+        } catch (error) {
+            console.error('Error deleting category:', error);
+            toast.error(error.message || 'Failed to delete category');
+        }
+    };
+
+    const formatCurrency = (val) => {
+        return new Intl.NumberFormat('en-PK', {
+            style: 'currency',
+            currency: 'PKR',
+            maximumFractionDigits: 0
+        }).format(val);
+    };
+
+    const handleExpenseClick = (expense) => {
+        setSelectedExpense(expense);
+        setIsDetailModalOpen(true);
+    };
+
+    return (
+        <div className="flex-1 overflow-y-auto p-8 xl:p-10 bg-slate-50 dark:bg-background">
+            <header className="flex items-center justify-between mb-8">
+                <div>
+                    <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Expense Management</h1>
+                    <p className="text-slate-500 dark:text-slate-400 mt-1">Track and manage your daily expenses</p>
+                </div>
+            </header>
+
+            {/* Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div className="bg-white dark:bg-background-dark p-6 rounded-2xl border border-slate-200 dark:border-gray-700 shadow-sm relative overflow-hidden group">
+                    <div className="absolute right-0 top-0 w-32 h-32 bg-blue-500/10 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110"></div>
+                    <div className="relative">
+                        <p className="text-slate-500 dark:text-slate-400 text-sm font-medium uppercase tracking-wider">Today's Expenses</p>
+                        <h3 className="text-3xl font-bold text-slate-900 dark:text-white mt-2">{formatCurrency(totalToday)}</h3>
+                    </div>
+                </div>
+                <div className="bg-white dark:bg-background-dark p-6 rounded-2xl border border-slate-200 dark:border-gray-700 shadow-sm relative overflow-hidden group">
+                    <div className="absolute right-0 top-0 w-32 h-32 bg-purple-500/10 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110"></div>
+                    <div className="relative">
+                        <p className="text-slate-500 dark:text-slate-400 text-sm font-medium uppercase tracking-wider">This Month</p>
+                        <h3 className="text-3xl font-bold text-slate-900 dark:text-white mt-2">{formatCurrency(totalMonth)}</h3>
+                    </div>
+                </div>
+                <div className="bg-white dark:bg-background-dark p-6 rounded-2xl border border-slate-200 dark:border-gray-700 shadow-sm relative overflow-hidden group">
+                    <div className="absolute right-0 top-0 w-32 h-32 bg-emerald-500/10 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110"></div>
+                    <div className="relative">
+                        <p className="text-slate-500 dark:text-slate-400 text-sm font-medium uppercase tracking-wider">This Year</p>
+                        <h3 className="text-3xl font-bold text-slate-900 dark:text-white mt-2">{formatCurrency(totalYear)}</h3>
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+                {/* Left Column: Form */}
+                <div className="xl:col-span-1 space-y-8">
+                    {/* Add Expense Form */}
+                    <div className="bg-white dark:bg-background-dark p-6 rounded-2xl border border-slate-200 dark:border-gray-700 shadow-sm">
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
+                            <span className="material-symbols-outlined text-eva-blue">add_circle</span>
+                            Add New Expense
+                        </h2>
+
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Amount (Rs.)</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium">Rs.</span>
+                                    <input
+                                        type="number"
+                                        step="1"
+                                        required
+                                        value={amount}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            if (val === '' || parseFloat(val) >= 0) {
+                                                setAmount(val);
+                                            }
+                                        }}
+                                        onKeyDown={(e) => {
+                                            // Allow decimals when typing but not with arrow keys
+                                            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                                                e.preventDefault();
+                                                const currentVal = parseFloat(amount) || 0;
+                                                const newVal = e.key === 'ArrowUp' ? currentVal + 1 : Math.max(0, currentVal - 1);
+                                                setAmount(newVal.toString());
+                                            }
+                                        }}
+                                        className="w-full pl-8 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-eva-blue dark:text-white transition-all"
+                                        placeholder="0.00"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <div className="flex items-center justify-between mb-1">
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Category</label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsAddingCategory(!isAddingCategory)}
+                                        className="text-xs text-eva-blue hover:underline font-medium"
+                                    >
+                                        {isAddingCategory ? 'Cancel' : '+ New Category'}
+                                    </button>
+                                </div>
+
+                                {isAddingCategory && (
+                                    <div className="mb-3 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl animate-in fade-in slide-in-from-top-1">
+                                        <div className="flex gap-2 mb-2">
+                                            <input
+                                                autoFocus
+                                                type="text"
+                                                value={newCategoryName}
+                                                onChange={(e) => setNewCategoryName(e.target.value)}
+                                                placeholder="Category Name"
+                                                className="flex-1 px-3 py-1.5 text-sm rounded-lg border-none focus:ring-2 focus:ring-eva-blue"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={handleAddCategory}
+                                                className="px-3 py-1.5 bg-eva-blue text-white rounded-lg text-sm font-bold"
+                                            >
+                                                Add
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="grid grid-cols-3 gap-2">
+                                    {categories.map(cat => (
+                                        <div key={cat.id} className="relative group">
+                                            <button
+                                                type="button"
+                                                onClick={() => setCategory(cat.id)}
+                                                className={`w-full flex flex-col items-center justify-center p-2 rounded-xl text-xs transition-all ${category === cat.id
+                                                    ? 'bg-eva-blue text-white shadow-md transform scale-105'
+                                                    : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                                    }`}
+                                            >
+                                                <span className="material-symbols-outlined text-lg mb-1">{cat.icon}</span>
+                                                {cat.name}
+                                            </button>
+
+                                            {/* Delete Category Button - Protected for default categories and Other */}
+                                            {!cat.is_default && cat.id !== 'other' && cat.name.toLowerCase() !== 'other' && (
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => handleDeleteCategory(cat.id, e)}
+                                                    className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-white items-center justify-center hidden group-hover:flex shadow-md z-10 hover:bg-red-600"
+                                                    title="Remove Category"
+                                                >
+                                                    <span className="material-symbols-outlined text-[10px] font-bold">close</span>
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Date</label>
+                                <input
+                                    type="date"
+                                    required
+                                    value={date}
+                                    onChange={(e) => setDate(e.target.value)}
+                                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-eva-blue dark:text-white transition-all"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Description</label>
+                                <textarea
+                                    required
+                                    value={description}
+                                    onChange={(e) => setDescription(e.target.value)}
+                                    rows="3"
+                                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-eva-blue dark:text-white transition-all resize-none"
+                                    placeholder="What was this for?"
+                                ></textarea>
+                            </div>
+
+                            <button
+                                type="submit"
+                                className="w-full py-3 bg-eva-blue hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 transition-all active:scale-95 flex items-center justify-center gap-2"
+                            >
+                                <span className="material-symbols-outlined">add</span>
+                                Add Expense
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                {/* Right Column: History */}
+                <div className="xl:col-span-2">
+                    <div className="bg-white dark:bg-background-dark rounded-2xl border border-slate-200 dark:border-gray-700 shadow-sm overflow-hidden flex flex-col h-full">
+                        <div className="p-6 border-b border-slate-200 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <h2 className="text-xl font-bold text-slate-900 dark:text-white">Transaction History</h2>
+
+                            <div className="flex items-center gap-2">
+                                <select
+                                    value={filterDate}
+                                    onChange={(e) => setFilterDate(e.target.value)}
+                                    className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-lg text-sm font-medium text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-eva-blue cursor-pointer"
+                                >
+                                    <option value="all">All Time</option>
+                                    <option value="today">Today</option>
+                                    <option value="month">This Month</option>
+                                </select>
+                                <select
+                                    value={filterCategory}
+                                    onChange={(e) => setFilterCategory(e.target.value)}
+                                    className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-lg text-sm font-medium text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-eva-blue cursor-pointer"
+                                >
+                                    <option value="all">All Categories</option>
+                                    {categories.map(c => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="overflow-x-auto flex-1">
+                            {loading ? (
+                                <div className="h-64 flex flex-col items-center justify-center text-slate-400">
+                                    <span className="material-symbols-outlined text-4xl mb-2 opacity-50 animate-spin">refresh</span>
+                                    <p>Loading expenses...</p>
+                                </div>
+                            ) : filteredExpenses.length === 0 ? (
+                                <div className="h-64 flex flex-col items-center justify-center text-slate-400">
+                                    <span className="material-symbols-outlined text-4xl mb-2 opacity-50">receipt_long</span>
+                                    <p>No expenses found</p>
+                                </div>
+                            ) : (
+                                <table className="w-full text-left">
+                                    <thead className="bg-slate-50 dark:bg-gray-800/50">
+                                        <tr>
+                                            <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Date</th>
+                                            <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Category</th>
+                                            <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Description</th>
+                                            <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 dark:divide-gray-800">
+                                        {filteredExpenses.map(expense => (
+                                            <tr
+                                                key={expense.id}
+                                                onClick={() => handleExpenseClick(expense)}
+                                                className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
+                                            >
+                                                <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-white whitespace-nowrap">
+                                                    {new Date(expense.date).toLocaleDateString()}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                                                        <span className="material-symbols-outlined text-[14px]">
+                                                            {expense.category_icon || 'receipt'}
+                                                        </span>
+                                                        {expense.category_name || 'Unknown'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400 max-w-xs truncate">
+                                                    {expense.description}
+                                                </td>
+                                                <td className="px-6 py-4 text-sm font-bold text-slate-900 dark:text-white text-right whitespace-nowrap">
+                                                    {formatCurrency(expense.amount)}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Confirmation Dialog */}
+            <ConfirmDialog
+                isOpen={showConfirmDialog}
+                onClose={() => {
+                    setShowConfirmDialog(false);
+                    setPendingExpense(null);
+                }}
+                onConfirm={handleConfirmExpense}
+                title="Confirm Expense"
+                message={pendingExpense ? `Add expense of Rs. ${pendingExpense.amount.toFixed(2)} for ${pendingExpense.categoryName}?\n\nDescription: ${pendingExpense.description}` : ''}
+                confirmText="Add Expense"
+                cancelText="Cancel"
+                type="warning"
+            />
+
+            {/* Expense Detail Modal */}
+            <ExpenseDetailModal
+                isOpen={isDetailModalOpen}
+                onClose={() => setIsDetailModalOpen(false)}
+                expense={selectedExpense}
+            />
+        </div>
+    );
+};
+
+export default Expenses;

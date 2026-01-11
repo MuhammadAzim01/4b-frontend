@@ -1,6 +1,10 @@
 import { RouterProvider } from 'react-router-dom';
+import { Toaster } from 'sonner';
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';;
+
 import { ModalProvider } from './context/ModalContext';
+import { InventoryProvider } from './context/InventoryContext';
+import { NotificationProvider } from './context/NotificationContext';
 
 import Router from './router/Router';
 
@@ -10,8 +14,15 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <Toaster richColors position="top-right" duration={2000} toastOptions={{
+        className: 'border border-gray-200 shadow-lg p-4'
+      }} />
       <ModalProvider>
-        <RouterProvider router={Router} />
+        <InventoryProvider>
+          <NotificationProvider>
+            <RouterProvider router={Router} />
+          </NotificationProvider>
+        </InventoryProvider>
       </ModalProvider>
     </QueryClientProvider>
   );

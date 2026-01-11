@@ -1,166 +1,323 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
+import { toast } from 'sonner';
+
+import { useFetchQuery } from '../hooks/useFetchQuery';
+import { useCreateUpdateMutation } from '../hooks/useCreateUpdateMutation';
+import { fetchWithAuth } from '../utils/fetchApis';
+import { generateInvoiceHtml } from '../components/InvoiceTemplate';
+import StartProductionModal from '../components/StartProductionModal';
+import EndProductionModal from '../components/EndProductionModal';
+import ProductionDetailsModal from '../components/ProductionDetailsModal';
+import { getAuthStatus } from '../utils/auth';
 
 const Production = () => {
+    const { batchNumber } = useParams();
+    const navigate = useNavigate();
+    const [isStartModalOpen, setIsStartModalOpen] = useState(false);
+    const [isEndModalOpen, setIsEndModalOpen] = useState(false);
+    const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+    const [currentRun, setCurrentRun] = useState(null);
+    const [selectedHistoryRun, setSelectedHistoryRun] = useState(null);
+    const [historyPage, setHistoryPage] = useState(1);
+    const { role } = getAuthStatus()?.user || {};
+
+    // Fetch production batches with pagination
+    const { data, isFetching, isError, error, refetch } = useFetchQuery({
+        url: `production/batches/?page=${historyPage}&page_size=5${batchNumber ? `&batch_number=${batchNumber}` : ''}`,
+        queryKey: ['production-batches', historyPage, batchNumber],
+        fetchFunction: fetchWithAuth,
+        staleTime: 2 * 60 * 1000,
+    });
+
+    // Handle batchNumber from URL params
+    useEffect(() => {
+        if (batchNumber && data?.results?.[0]) {
+            setSelectedHistoryRun(data.results[0]);
+            setIsDetailsModalOpen(true);
+        }
+    }, [batchNumber, data]);
+
+    // Start production mutation
+    const startProductionMutation = useCreateUpdateMutation({
+        url: 'production/batches/start/',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        fetchFunction: fetchWithAuth,
+        onSuccessMessage: 'Production started successfully',
+        onErrorMessage: 'Failed to start production',
+        onSuccess: () => {
+            refetch();
+        },
+    });
+
+    const batches = data?.results || [];
+    const activeRuns = batches.filter(b => b.status === 'pending');
+    const history = batches.filter(b => b.status === 'completed');
+
+    const handleStartRun = (materials) => {
+        const payload = {
+            raw_materials: materials.map(m => ({
+                raw_material: parseInt(m.materialId),
+                quantity_used: parseFloat(m.quantity)
+            })),
+            notes: ''
+        };
+
+        startProductionMutation.mutate(JSON.stringify(payload));
+        setIsStartModalOpen(false);
+    };
+
+    const handleOpenEndModal = (run) => {
+        setCurrentRun(run);
+        setIsEndModalOpen(true);
+    };
+
+    const handleEndRun = async (resultData) => {
+        const payload = {
+            product: parseInt(resultData.productId),
+            product_quantity: parseFloat(resultData.outputQuantity),
+            wastage: resultData.waste.map(w => ({
+                raw_material: parseInt(w.materialId),
+                quantity_wasted: parseFloat(w.quantity)
+            })),
+            returned: resultData.returns.map(r => ({
+                raw_material: parseInt(r.materialId),
+                quantity_returned: parseFloat(r.quantity)
+            })),
+            notes: resultData.notes || ''
+        };
+
+        const loadingToast = toast.loading('Completing production...');
+
+        try {
+            await fetchWithAuth(`production/batches/${currentRun.id}/end/`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            toast.dismiss(loadingToast);
+            toast.success('Production completed successfully');
+            refetch();
+            setIsEndModalOpen(false);
+            setCurrentRun(null);
+        } catch (error) {
+            toast.dismiss(loadingToast);
+            toast.error('Failed to complete production');
+            console.error('Failed to end production:', error);
+        }
+    };
+
     return (
         <div className="flex-1 overflow-y-auto p-8 xl:p-10">
             {/* PageHeading */}
             <header className="flex flex-wrap items-center justify-between gap-4 mb-8">
                 <h1 className="text-slate-900 dark:text-white text-3xl font-black tracking-tight">Production Module</h1>
                 <button
-                    className="flex items-center justify-center gap-2 h-10 px-4 text-sm font-bold text-white rounded-lg bg-primary hover:bg-primary/90 transition-colors">
+                    onClick={() => setIsStartModalOpen(true)}
+                    className="flex items-center justify-center gap-2 h-10 px-4 text-sm font-bold text-white rounded-lg bg-eva-blue hover:bg-blue-800 transition-colors"
+                >
                     <span className="material-symbols-outlined text-base">add</span>
                     <span className="truncate">Start New Production Run</span>
                 </button>
             </header>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Left Panel: Input Form */}
+                {/* Left Panel: Active Production Runs */}
                 <div className="lg:col-span-1">
-                    <div className="p-6 bg-white dark:bg-background-dark rounded-xl shadow-sm border border-slate-200 dark:border-gray-700">
-                        <h2 className="text-slate-900 dark:text-white text-xl font-bold tracking-tight mb-6">Start a New Production Run</h2>
-                        <form className="space-y-5">
-                            <label className="flex flex-col">
-                                <p className="text-sm font-medium pb-2 text-slate-900 dark:text-white">Raw Materials Used</p>
-                                <select
-                                    className="w-full rounded-lg text-slate-900 bg-white border-slate-200 dark:border-gray-700 focus:ring-primary focus:border-primary dark:bg-background-dark dark:text-white">
-                                    <option>Select Material</option>
-                                    <option>PET Preforms (PCO 1881)</option>
-                                    <option>HDPE Caps (28mm)</option>
-                                    <option>Printed Labels (BOPP)</option>
-                                </select>
-                            </label>
-                            <label className="flex flex-col">
-                                <p className="text-sm font-medium pb-2 text-slate-900 dark:text-white">Quantity Consumed</p>
-                                <input
-                                    className="w-full rounded-lg text-slate-900 bg-white border-slate-200 dark:border-gray-700 focus:ring-primary focus:border-primary dark:bg-background-dark dark:text-white"
-                                    placeholder="e.g., 500" type="number" />
-                            </label>
-                            <div className="border-t border-slate-200 dark:border-gray-700 my-4"></div>
-                            <label className="flex flex-col">
-                                <p className="text-sm font-medium pb-2 text-slate-900 dark:text-white">Output Generated</p>
-                                <select
-                                    className="w-full rounded-lg text-slate-900 bg-white border-slate-200 dark:border-gray-700 focus:ring-primary focus:border-primary dark:bg-background-dark dark:text-white">
-                                    <option>Select Finished Good</option>
-                                    <option>Water Bottle - 500ml</option>
-                                    <option>Water Bottle - 1L</option>
-                                    <option>Water Bottle - 1.5L</option>
-                                </select>
-                            </label>
-                            <label className="flex flex-col">
-                                <p className="text-sm font-medium pb-2 text-slate-900 dark:text-white">Quantity Produced</p>
-                                <input
-                                    className="w-full rounded-lg text-slate-900 bg-white border-slate-200 dark:border-gray-700 focus:ring-primary focus:border-primary dark:bg-background-dark dark:text-white"
-                                    placeholder="e.g., 500" type="number" />
-                            </label>
-                            <div className="border-t border-slate-200 dark:border-gray-700 my-4"></div>
-                            <div className="flex flex-col">
-                                <p className="text-sm font-medium pb-2 text-slate-900 dark:text-white">Calculated Cost of Production</p>
-                                <div
-                                    className="flex items-center h-12 px-4 rounded-lg bg-gray-100 dark:bg-background-dark border border-slate-200 dark:border-gray-700">
-                                    <span className="text-lg font-bold text-green-600">$125.00</span>
-                                </div>
+                    <div className="p-6 bg-white dark:bg-background-dark rounded-xl shadow-sm border border-slate-200 dark:border-gray-700 h-full flex flex-col">
+                        <h2 className="text-slate-900 dark:text-white text-xl font-bold tracking-tight mb-6 flex items-center gap-2">
+                            <span className="relative flex h-3 w-3">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                            </span>
+                            Active Runs
+                        </h2>
+
+                        {isFetching ? (
+                            <div className="flex-1 flex items-center justify-center">
+                                <LoadingSpinner />
                             </div>
-                            <div className="flex items-center justify-end gap-3 pt-4">
-                                <button
-                                    className="h-10 px-4 text-sm font-bold text-slate-900 dark:text-white rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                                    type="reset">Clear</button>
-                                <button
-                                    className="h-10 px-4 text-sm font-bold text-white rounded-lg bg-primary hover:bg-primary/90 transition-colors"
-                                    type="submit">Confirm & Start Run</button>
+                        ) : activeRuns.length === 0 ? (
+                            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-center p-8 border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-lg">
+                                <span className="material-symbols-outlined text-4xl mb-2 text-slate-300">factory</span>
+                                <p>No production runs in progress.</p>
+                                <p className="text-sm mt-2">Click "Start New Run" to begin.</p>
                             </div>
-                        </form>
+                        ) : (
+                            <div className="space-y-4">
+                                {activeRuns.map(run => (
+                                    <div key={run.id} className="p-4 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+                                        <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-green-50 to-transparent dark:from-green-900/20 -mr-4 -mt-4 rounded-bl-full"></div>
+
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div>
+                                                <h3 className="font-bold text-slate-900 dark:text-white">{run.batch_number}</h3>
+                                                <p className="text-xs text-slate-500">{new Date(run.start_date).toLocaleString()}</p>
+                                            </div>
+                                            <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full font-bold">In Progress</span>
+                                        </div>
+
+                                        <div className="mb-4">
+                                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Materials:</p>
+                                            <ul className="text-sm text-slate-700 dark:text-slate-300 space-y-1">
+                                                {run.raw_materials?.map((m, idx) => (
+                                                    <li key={idx} className="flex justify-between">
+                                                        <span>{m.raw_material_name}</span>
+                                                        <span className="font-mono text-slate-500">x{m.quantity_used}</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+
+                                        <div className="text-xs text-slate-600 dark:text-slate-400 mb-3">
+                                            <span className="font-semibold">Total Cost:</span> Rs. {parseFloat(run.total_cost).toFixed(2)}
+                                        </div>
+
+                                        <button
+                                            onClick={() => handleOpenEndModal(run)}
+                                            className="w-full py-2 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 text-white rounded-lg text-sm font-bold transition-colors"
+                                        >
+                                            End Run & Record Output
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
 
-                {/* Right Panel: Production Logs */}
+                {/* Right Panel: Production Logs (History) */}
                 <div className="lg:col-span-2">
                     <div className="p-6 bg-white dark:bg-background-dark rounded-xl shadow-sm border border-slate-200 dark:border-gray-700">
                         <h2 className="text-slate-900 dark:text-white text-xl font-bold tracking-tight mb-4">Production Run History</h2>
                         <div className="relative mb-4">
                             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">search</span>
                             <input
-                                className="w-full rounded-lg pl-10 bg-white border-slate-200 dark:border-gray-700 focus:ring-primary focus:border-primary dark:bg-background-dark dark:text-white"
+                                className="w-full rounded-lg pl-10 h-10 bg-white border-slate-200 dark:border-gray-700 focus:ring-primary focus:border-primary dark:bg-background-dark dark:text-white"
                                 placeholder="Search by Run ID, material..." type="text" />
                         </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm text-left">
                                 <thead className="text-xs text-gray-500 dark:text-gray-400 uppercase bg-slate-50 dark:bg-background-dark border-b border-slate-200 dark:border-gray-700">
                                     <tr>
-                                        <th className="px-4 py-3" scope="col">Run ID</th>
+                                        <th className="px-4 py-3" scope="col">Batch ID</th>
                                         <th className="px-4 py-3" scope="col">Date/Time</th>
-                                        <th className="px-4 py-3" scope="col">Raw Material</th>
-                                        <th className="px-4 py-3 text-right" scope="col">Qty</th>
-                                        <th className="px-4 py-3" scope="col">Finished Good</th>
-                                        <th className="px-4 py-3 text-right" scope="col">Qty</th>
-                                        <th className="px-4 py-3 text-right" scope="col">Cost</th>
+                                        <th className="px-4 py-3" scope="col">Raw Materials</th>
+                                        <th className="px-4 py-3" scope="col">Product</th>
+                                        <th className="px-4 py-3 text-right" scope="col">Output Qty</th>
+                                        <th className="px-4 py-3 text-center" scope="col">Efficiency</th>
+                                        <th className="px-4 py-3" scope="col">Waste</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr className="border-b border-slate-200 dark:border-gray-700">
-                                        <td className="px-4 py-3 font-mono text-xs text-slate-900 dark:text-white">PRD-84201</td>
-                                        <td className="px-4 py-3 text-slate-900 dark:text-white">2023-10-27 09:15</td>
-                                        <td className="px-4 py-3 text-slate-900 dark:text-white">PET Preforms</td>
-                                        <td className="px-4 py-3 text-right text-red-600 font-semibold">-1,000</td>
-                                        <td className="px-4 py-3 text-slate-900 dark:text-white">Water Bottle - 500ml</td>
-                                        <td className="px-4 py-3 text-right text-green-600 font-semibold">+1,000</td>
-                                        <td className="px-4 py-3 text-right font-semibold text-slate-900 dark:text-white">$250.00</td>
-                                    </tr>
-                                    <tr className="border-b border-slate-200 dark:border-gray-700">
-                                        <td className="px-4 py-3 font-mono text-xs text-slate-900 dark:text-white">PRD-84200</td>
-                                        <td className="px-4 py-3 text-slate-900 dark:text-white">2023-10-26 14:30</td>
-                                        <td className="px-4 py-3 text-slate-900 dark:text-white">HDPE Caps</td>
-                                        <td className="px-4 py-3 text-right text-red-600 font-semibold">-5,000</td>
-                                        <td className="px-4 py-3 text-slate-900 dark:text-white">Caps Applied</td>
-                                        <td className="px-4 py-3 text-right text-green-600 font-semibold">+5,000</td>
-                                        <td className="px-4 py-3 text-right font-semibold text-slate-900 dark:text-white">$150.00</td>
-                                    </tr>
-                                    <tr className="border-b border-slate-200 dark:border-gray-700">
-                                        <td className="px-4 py-3 font-mono text-xs text-slate-900 dark:text-white">PRD-84199</td>
-                                        <td className="px-4 py-3 text-slate-900 dark:text-white">2023-10-26 11:00</td>
-                                        <td className="px-4 py-3 text-slate-900 dark:text-white">Printed Labels</td>
-                                        <td className="px-4 py-3 text-right text-red-600 font-semibold">-2,500</td>
-                                        <td className="px-4 py-3 text-slate-900 dark:text-white">Bottles Labeled</td>
-                                        <td className="px-4 py-3 text-right text-green-600 font-semibold">+2,500</td>
-                                        <td className="px-4 py-3 text-right font-semibold text-slate-900 dark:text-white">$75.50</td>
-                                    </tr>
-                                    <tr className="border-b border-slate-200 dark:border-gray-700">
-                                        <td className="px-4 py-3 font-mono text-xs text-slate-900 dark:text-white">PRD-84198</td>
-                                        <td className="px-4 py-3 text-slate-900 dark:text-white">2023-10-25 16:45</td>
-                                        <td className="px-4 py-3 text-slate-900 dark:text-white">PET Preforms</td>
-                                        <td className="px-4 py-3 text-right text-red-600 font-semibold">-500</td>
-                                        <td className="px-4 py-3 text-slate-900 dark:text-white">Water Bottle - 1L</td>
-                                        <td className="px-4 py-3 text-right text-green-600 font-semibold">+500</td>
-                                        <td className="px-4 py-3 text-right font-semibold text-slate-900 dark:text-white">$175.00</td>
-                                    </tr>
-                                    <tr className="border-b border-slate-200 dark:border-gray-700">
-                                        <td className="px-4 py-3 font-mono text-xs text-slate-900 dark:text-white">PRD-84197</td>
-                                        <td className="px-4 py-3 text-slate-900 dark:text-white">2023-10-25 10:05</td>
-                                        <td className="px-4 py-3 text-slate-900 dark:text-white">PET Preforms</td>
-                                        <td className="px-4 py-3 text-right text-red-600 font-semibold">-1,000</td>
-                                        <td className="px-4 py-3 text-slate-900 dark:text-white">Water Bottle - 500ml</td>
-                                        <td className="px-4 py-3 text-right text-green-600 font-semibold">+1,000</td>
-                                        <td className="px-4 py-3 text-right font-semibold text-slate-900 dark:text-white">$250.00</td>
-                                    </tr>
+                                    {isFetching ? (
+                                        <tr>
+                                            <td colSpan="7" className="px-4 py-8 text-center">
+                                                <LoadingSpinner />
+                                            </td>
+                                        </tr>
+                                    ) : history.length === 0 ? (
+                                        <tr>
+                                            <td colSpan="7" className="px-4 py-8 text-center text-slate-400">
+                                                No completed production runs yet
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        history.map((run) => (
+                                            <tr
+                                                key={run.id}
+                                                onClick={() => navigate(`/${role}/production/${run.batch_number}`)}
+                                                className="border-b border-slate-200 dark:border-gray-700 hover:bg-slate-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer group"
+                                            >
+                                                <td className="px-4 py-3 font-mono text-xs text-slate-900 dark:text-white font-medium group-hover:text-eva-blue transition-colors">{run.batch_number}</td>
+                                                <td className="px-4 py-3 text-slate-500 dark:text-gray-400">{new Date(run.end_date).toLocaleString()}</td>
+                                                <td className="px-4 py-3 text-slate-900 dark:text-white">
+                                                    {run.raw_materials?.map(m => m.raw_material_name).join(', ')}
+                                                </td>
+                                                <td className="px-4 py-3 text-slate-900 dark:text-white">{run.product_name}</td>
+                                                <td className="px-4 py-3 text-right text-slate-900 dark:text-white font-bold">{run.product_quantity}</td>
+                                                <td className="px-4 py-3 text-center">
+                                                    <span className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-bold
+                                                        ${run.efficiency >= 95 ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
+                                                            run.efficiency >= 85 ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
+                                                                run.efficiency >= 70 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                                                                    'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'}`}>
+                                                        {run.efficiency}%
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 text-xs">
+                                                    {run.raw_materials?.some(m => m.quantity_wasted > 0) ? (
+                                                        <div className="flex flex-col gap-1">
+                                                            {run.raw_materials.filter(m => m.quantity_wasted > 0).map((m, i) => (
+                                                                <span key={i} className="text-red-500 dark:text-red-400">{m.raw_material_name}: {m.quantity_wasted}</span>
+                                                            ))}
+                                                        </div>
+                                                    ) : <span className="text-green-500">None</span>}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
                                 </tbody>
                             </table>
                         </div>
-                        <div className="flex items-center justify-between pt-4 text-sm text-gray-500 dark:text-gray-400">
-                            <span>Showing 1-5 of 128</span>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    className="flex items-center justify-center size-8 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-                                    disabled>
-                                    <span className="material-symbols-outlined text-base">chevron_left</span>
-                                </button>
-                                <button
-                                    className="flex items-center justify-center size-8 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
-                                    <span className="material-symbols-outlined text-base">chevron_right</span>
-                                </button>
+
+                        {/* Pagination Controls */}
+                        {history.length > 0 && data && (
+                            <div className="mt-4 flex items-center justify-between px-4">
+                                <div className="text-sm text-slate-500 dark:text-slate-400">
+                                    Showing {((historyPage - 1) * 5) + 1} to {Math.min(historyPage * 5, data.count)} of {data.count} completed runs
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setHistoryPage(p => Math.max(1, p - 1))}
+                                        disabled={!data.previous}
+                                        className="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        title="Previous page"
+                                    >
+                                        <span className="material-symbols-outlined text-base">chevron_left</span>
+                                    </button>
+                                    <div className="flex items-center px-3 text-sm font-medium text-slate-700 dark:text-slate-300">
+                                        Page {historyPage} of {Math.ceil(data.count / 5)}
+                                    </div>
+                                    <button
+                                        onClick={() => setHistoryPage(p => p + 1)}
+                                        disabled={!data.next}
+                                        className="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        title="Next page"
+                                    >
+                                        <span className="material-symbols-outlined text-base">chevron_right</span>
+                                    </button>
+                                </div>
                             </div>
-                        </div>
+                        )}
                     </div>
                 </div>
             </div>
+
+            <StartProductionModal
+                isOpen={isStartModalOpen}
+                onClose={() => setIsStartModalOpen(false)}
+                onStart={handleStartRun}
+            />
+
+            <EndProductionModal
+                isOpen={isEndModalOpen}
+                onClose={() => setIsEndModalOpen(false)}
+                runData={currentRun}
+                onEnd={handleEndRun}
+            />
+
+            <ProductionDetailsModal
+                isOpen={isDetailsModalOpen}
+                onClose={() => {
+                    setIsDetailsModalOpen(false);
+                    if (batchNumber) navigate(`/${role}/production`);
+                }}
+                run={selectedHistoryRun}
+            />
         </div>
     );
 };
