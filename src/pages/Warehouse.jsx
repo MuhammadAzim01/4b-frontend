@@ -249,12 +249,12 @@ const Warehouse = () => {
                                         : 'Total Stock on Hand'}
                                 </p>
                                 <p className="text-slate-900 dark:text-white text-3xl font-bold">
-                                    {product.stock_quantity || 0} <span className="text-xl font-medium text-slate-500">{product.unit || 'Units'}</span>
+                                    {product.stock_quantity / product.pack_size || 0} Pack <span className="text-xl font-medium text-slate-500">{product.stock_quantity} {product.unit || 'Units'}</span>
                                 </p>
                                 {/* Display Period Stats if available */}
                                 {product.period_production > 0 && (
                                     <p className="text-[#198754] text-sm font-medium">
-                                        +{product.period_production} Produced
+                                        +{product.period_production / product.pack_size} Pack{product.period_production} unit Produced
                                     </p>
                                 )}
                                 {product.period_sales > 0 && (
@@ -316,8 +316,8 @@ const Warehouse = () => {
                                             key={type}
                                             onClick={() => setLedgerFilterType(type)}
                                             className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${ledgerFilterType === type
-                                                    ? 'bg-white dark:bg-slate-700 shadow text-slate-900 dark:text-white'
-                                                    : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                                                ? 'bg-white dark:bg-slate-700 shadow text-slate-900 dark:text-white'
+                                                : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
                                                 }`}
                                         >
                                             {type === 'week' ? 'Last 7 Days' : type === 'month' ? 'This Month' : 'Custom'}
