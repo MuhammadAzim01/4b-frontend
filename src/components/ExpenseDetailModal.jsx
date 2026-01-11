@@ -73,7 +73,7 @@ const ExpenseDetailModal = ({ isOpen, onClose, expense }) => {
                                 </div>
                                 <div>
                                     <p className="font-bold text-slate-900 dark:text-white">
-                                        {expense.user_name || 'Unknown User'}
+                                        {expense.created_by_name || 'Unknown User'}
                                     </p>
                                 </div>
                             </div>
