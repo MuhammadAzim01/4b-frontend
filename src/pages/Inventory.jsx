@@ -21,17 +21,25 @@ const Inventory = () => {
     const [showFilters, setShowFilters] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
+    const [page, setPage] = useState(1);
+    const [pendingPage, setPendingPage] = useState(1);
+
+    // Reset page when filters change
+    useEffect(() => {
+        setPage(1);
+        setPendingPage(1);
+    }, [searchQuery, statusFilter, activeTab]);
 
     const { data, isFetching, isError, error } = useFetchQuery({
-        url: `inventory/items/?category=${activeTab}`,
-        queryKey: ['items', activeTab],
+        url: `inventory/items/?category=${activeTab}&search=${searchQuery}&stock_status=${statusFilter}&page=${page}&page_size=20`,
+        queryKey: ['items', activeTab, searchQuery, statusFilter, page],
         fetchFunction: fetchWithAuth,
         staleTime: 2 * 60 * 1000,
     });
 
     const { data: pendingItems } = useFetchQuery({
-        url: `inventory/transactions/?category=${activeTab}&status=pending`,
-        queryKey: ['transactions', activeTab],
+        url: `inventory/transactions/?category=${activeTab}&status=pending&page=${pendingPage}&page_size=20`,
+        queryKey: ['transactions', activeTab, pendingPage],
         fetchFunction: fetchWithAuth,
         staleTime: 2 * 60 * 1000,
     });
@@ -58,19 +66,7 @@ const Inventory = () => {
         setHistoryItem(item);
     };
 
-    const rawInventory = data?.results || [];
-    const filteredInventory = rawInventory.filter(item => {
-        // Search Filter
-        if (searchQuery && !item.name.toLowerCase().includes(searchQuery.toLowerCase())) {
-            return false;
-        }
-        // Status Filter
-        if (statusFilter && item.stock_status !== statusFilter) {
-            return false;
-        }
-        return true;
-    });
-
+    const filteredInventory = data?.results || [];
     const filteredPending = pendingItems?.results || [];
 
     return (
@@ -171,7 +167,8 @@ const Inventory = () => {
                 )}
 
                 {/* Pending Approvals (Admin Only) */}
-                {role === 'admin' && filteredPending.length > 0 && (
+                {/* Pending Approvals (Admin Only) */}
+                {role === 'admin' && (pendingItems?.results?.length > 0 || pendingItems?.count > 0) && (
                     <div className="mb-8">
                         <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
                             <span className="material-symbols-outlined text-orange-500">pending_actions</span>
@@ -207,6 +204,33 @@ const Inventory = () => {
                                     ))}
                                 </tbody>
                             </table>
+                            {/* Pending Items Pagination Controls */}
+                            {pendingItems?.count > 0 && (
+                                <div className="p-4 flex items-center justify-between border-t border-orange-200 dark:border-orange-800">
+                                    <div className="text-sm text-slate-500 dark:text-slate-400">
+                                        Showing {((pendingPage - 1) * 20) + 1} to {Math.min(pendingPage * 20, pendingItems.count)} of {pendingItems.count} items
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => setPendingPage(p => Math.max(1, p - 1))}
+                                            disabled={!pendingItems.previous}
+                                            className="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        >
+                                            <span className="material-symbols-outlined text-base">chevron_left</span>
+                                        </button>
+                                        <div className="flex items-center px-3 text-sm font-medium text-slate-700 dark:text-slate-300">
+                                            Page {pendingPage} of {Math.max(1, Math.ceil(pendingItems.count / 20))}
+                                        </div>
+                                        <button
+                                            onClick={() => setPendingPage(p => p + 1)}
+                                            disabled={!pendingItems.next}
+                                            className="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        >
+                                            <span className="material-symbols-outlined text-base">chevron_right</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
@@ -283,6 +307,33 @@ const Inventory = () => {
                                     ))}
                                 </tbody>
                             </table>
+                            {/* Main Inventory Pagination Controls */}
+                            {data && data.count > 0 && (
+                                <div className="p-4 flex items-center justify-between border-t border-slate-200 dark:border-gray-700">
+                                    <div className="text-sm text-slate-500 dark:text-slate-400">
+                                        Showing {((page - 1) * 20) + 1} to {Math.min(page * 20, data.count)} of {data.count} items
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => setPage(p => Math.max(1, p - 1))}
+                                            disabled={!data.previous}
+                                            className="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        >
+                                            <span className="material-symbols-outlined text-base">chevron_left</span>
+                                        </button>
+                                        <div className="flex items-center px-3 text-sm font-medium text-slate-700 dark:text-slate-300">
+                                            Page {page} of {Math.max(1, Math.ceil(data.count / 20))}
+                                        </div>
+                                        <button
+                                            onClick={() => setPage(p => p + 1)}
+                                            disabled={!data.next}
+                                            className="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        >
+                                            <span className="material-symbols-outlined text-base">chevron_right</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
