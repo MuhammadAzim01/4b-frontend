@@ -14,6 +14,7 @@ const PurchaseModal = ({ isOpen, onClose, role, onOpenCreateModal }) => {
         note: ''
     });
     const [isCustomSupplier, setIsCustomSupplier] = useState(false);
+    const [itemSearch, setItemSearch] = useState('');
 
     const addItemTransactionMutation = useCreateUpdateMutation({
         url: `inventory/transactions/`,
@@ -30,8 +31,8 @@ const PurchaseModal = ({ isOpen, onClose, role, onOpenCreateModal }) => {
     });
     // Filter items based on selected category
     const { data, isFetching, isError, error } = useFetchQuery({
-        url: `inventory/items/?category=${formData.category}`,
-        queryKey: ['items', formData.category],
+        url: `inventory/items/?category=${formData.category}&search=${itemSearch}`,
+        queryKey: ['items', formData.category, itemSearch],
         fetchFunction: fetchWithAuth,
         enabled: !!formData.category && isOpen,
         staleTime: 5 * 60 * 1000,
@@ -135,6 +136,14 @@ const PurchaseModal = ({ isOpen, onClose, role, onOpenCreateModal }) => {
 
                     <div>
                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Item Name</label>
+                        {/* Search Input for Items */}
+                        <input
+                            type="text"
+                            value={itemSearch}
+                            onChange={(e) => setItemSearch(e.target.value)}
+                            placeholder="Search item..."
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white dark:bg-background-dark dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-eva-blue focus:border-transparent outline-none transition mb-2 text-sm"
+                        />
                         <select
                             name="itemSelect"
                             onChange={handleChange}
