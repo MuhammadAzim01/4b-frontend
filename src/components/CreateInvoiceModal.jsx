@@ -287,7 +287,7 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                                         <input
                                             required={!isFocEnabled}
                                             type="number"
-                                            placeholder="Qty"
+                                            placeholder="Qty(per pack)"
                                             min="0.01"
                                             step="0.01"
                                             value={item.quantity}
@@ -297,7 +297,7 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                                         <input
                                             required={!isFocEnabled}
                                             type="number"
-                                            placeholder="Price"
+                                            placeholder="Price (per pack)"
                                             min="0"
                                             step="0.01"
                                             value={item.unitPrice}
@@ -362,7 +362,7 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                                                 <input
                                                     required
                                                     type="number"
-                                                    placeholder="Qty"
+                                                    placeholder="Qty(in Packs)"
                                                     min="0.01"
                                                     step="0.01"
                                                     value={item.quantity}
@@ -372,7 +372,7 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                                                 <input
                                                     required
                                                     type="number"
-                                                    placeholder="Cost"
+                                                    placeholder="Cost Per Pack"
                                                     min="0"
                                                     step="0.01"
                                                     value={item.unitPrice}
