@@ -56,13 +56,14 @@ const Production = () => {
     const activeRuns = batches.filter(b => b.status === 'pending');
     const history = batches.filter(b => b.status === 'completed');
 
-    const handleStartRun = (materials) => {
+    const handleStartRun = (materials, is_bowled_production) => {
         const payload = {
             raw_materials: materials.map(m => ({
                 raw_material: parseInt(m.materialId),
                 quantity_used: parseFloat(m.quantity)
             })),
-            notes: ''
+            notes: '',
+            is_bowled_production
         };
 
         startProductionMutation.mutate(JSON.stringify(payload));
@@ -237,7 +238,7 @@ const Production = () => {
                                                 <td className="px-4 py-3 text-slate-900 dark:text-white">
                                                     {run.raw_materials?.map(m => m.raw_material_name).join(', ')}
                                                 </td>
-                                                <td className="px-4 py-3 text-slate-900 dark:text-white">{run.product_name}</td>
+                                                <td className="px-4 py-3 text-slate-900 dark:text-white">{run.product_name || "Self Blow Bottle"}</td>
                                                 <td className="px-4 py-3 text-right text-slate-900 dark:text-white font-bold">{run.product_quantity}</td>
                                                 <td className="px-4 py-3 text-center">
                                                     <span className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-bold
