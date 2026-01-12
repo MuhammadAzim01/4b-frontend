@@ -103,7 +103,7 @@ const ProductionDetailsModal = ({ isOpen, onClose, run }) => {
                                 <div className="space-y-3">
                                     <div>
                                         <p className="text-xs text-green-800 dark:text-green-400 font-semibold uppercase">Product</p>
-                                        <p className="text-lg font-bold text-slate-900 dark:text-white">{run.product_name || 'N/A'}</p>
+                                        <p className="text-lg font-bold text-slate-900 dark:text-white">{run.product_name || 'Self Blow Bottle'}</p>
                                     </div>
                                     <div className="h-px bg-green-200 dark:bg-green-800/50"></div>
                                     <div className="flex justify-between items-baseline">

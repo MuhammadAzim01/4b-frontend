@@ -6,6 +6,7 @@ import LoadingSpinner from './ui/LoadingSpinner';
 
 
 const StartProductionModal = ({ isOpen, onClose, onStart }) => {
+    const [activeTab, setActiveTab] = useState('water_pet'); // 'water_pet' or 'bottle_blowing'
     const [materials, setMaterials] = useState([{ id: Date.now(), materialId: '', quantity: '' }]);
 
     const { data: rawMaterials, isFetching } = useFetchQuery({
@@ -14,6 +15,12 @@ const StartProductionModal = ({ isOpen, onClose, onStart }) => {
         fetchFunction: fetchWithAuth,
         enabled: isOpen,
     });
+
+    const handleTabChange = (tab) => {
+        setActiveTab(tab);
+        // Reset to single material row when switching tabs
+        setMaterials([{ id: Date.now(), materialId: '', quantity: '' }]);
+    };
 
     const handleAddMaterial = () => {
         setMaterials([...materials, { id: Date.now(), materialId: '', quantity: '' }]);
@@ -58,15 +65,21 @@ const StartProductionModal = ({ isOpen, onClose, onStart }) => {
 
     // Get available materials (not already selected and has quantity > 0)
     const getAvailableMaterials = (currentMaterialId) => {
+        if (activeTab == 'bottle_blowing') {
+            return rawMaterials?.results?.filter(item =>
+                item.name.includes('Preform') && parseFloat(item.available_quantity) > 0
+            ) || [];
+        }
+
         const selectedIds = materials.map(m => m.materialId).filter(id => id !== currentMaterialId);
-        return rawMaterials?.results?.filter(item => 
+        return rawMaterials?.results?.filter(item =>
             !selectedIds.includes(item.id.toString()) && parseFloat(item.available_quantity) > 0
         ) || [];
     };
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        onStart(materials);
+        onStart(materials, activeTab == 'bottle_blowing');
     };
 
     if (!isOpen) return null;
@@ -81,23 +94,48 @@ const StartProductionModal = ({ isOpen, onClose, onStart }) => {
                     </button>
                 </div>
 
+                <div className="px-6 pt-4">
+                    <div className="flex space-x-4 border-b border-slate-200 dark:border-slate-700">
+                        <button
+                            onClick={() => handleTabChange('water_pet')}
+                            className={`pb-2 text-sm font-medium transition-colors border-b-2 ${activeTab === 'water_pet'
+                                ? 'border-eva-blue text-eva-blue'
+                                : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
+                                }`}
+                        >
+                            Water Pet Production
+                        </button>
+                        <button
+                            onClick={() => handleTabChange('bottle_blowing')}
+                            className={`pb-2 text-sm font-medium transition-colors border-b-2 ${activeTab === 'bottle_blowing'
+                                ? 'border-eva-blue text-eva-blue'
+                                : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
+                                }`}
+                        >
+                            Bottle Blowing
+                        </button>
+                    </div>
+                </div>
+
                 <form onSubmit={handleSubmit} className="p-6">
                     <div className="space-y-4 mb-6">
                         <div className="flex justify-between items-center mb-2">
                             <label className="text-sm font-semibold text-slate-900 dark:text-white">Raw Materials Used</label>
-                            <button
-                                type="button"
-                                onClick={handleAddMaterial}
-                                className="text-xs font-bold text-eva-blue hover:underline flex items-center gap-1"
-                            >
-                                <span className="material-symbols-outlined text-sm">add</span> Add Material
-                            </button>
+                            {activeTab === 'water_pet' && (
+                                <button
+                                    type="button"
+                                    onClick={handleAddMaterial}
+                                    className="text-xs font-bold text-eva-blue hover:underline flex items-center gap-1"
+                                >
+                                    <span className="material-symbols-outlined text-sm">add</span> Add Material
+                                </button>
+                            )}
                         </div>
 
                         {materials.map((field, index) => {
                             const availableMaterials = getAvailableMaterials(field.materialId);
                             const maxQty = getMaxQuantity(field.materialId);
-                            
+
                             return (
                                 <div key={field.id} className="flex gap-2 items-start">
                                     <div className="flex-1">

@@ -19,7 +19,14 @@ const EndProductionModal = ({ isOpen, onClose, onEnd, runData }) => {
         enabled: isOpen,
     });
 
-    const products = data?.results || [];
+    const { data: rawMaterials } = useFetchQuery({
+        url: 'inventory/items/?category=raw_materials&search=Self Blow',
+        queryKey: ['raw_materials'],
+        fetchFunction: fetchWithAuth,
+        enabled: isOpen,
+    });
+
+    const products = runData?.is_bowled_production ? rawMaterials?.results || [] : data?.results || [];
 
     const handleAddWaste = () => {
         setWasteItems([...wasteItems, { id: Date.now(), materialId: '', quantity: '' }]);
@@ -183,6 +190,8 @@ const EndProductionModal = ({ isOpen, onClose, onEnd, runData }) => {
     };
 
     if (!isOpen || !runData) return null;
+
+    console.log('run data', runData)
 
     return (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
