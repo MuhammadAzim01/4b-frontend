@@ -19,7 +19,14 @@ const EndProductionModal = ({ isOpen, onClose, onEnd, runData }) => {
         enabled: isOpen,
     });
 
-    const products = data?.results || [];
+    const { data: rawMaterials } = useFetchQuery({
+        url: 'inventory/items/?category=raw_materials&search=Self Blow',
+        queryKey: ['raw_materials'],
+        fetchFunction: fetchWithAuth,
+        enabled: isOpen,
+    });
+
+    const products = runData?.is_bowled_production ? rawMaterials?.results || [] : data?.results || [];
 
     const handleAddWaste = () => {
         setWasteItems([...wasteItems, { id: Date.now(), materialId: '', quantity: '' }]);
@@ -130,8 +137,12 @@ const EndProductionModal = ({ isOpen, onClose, onEnd, runData }) => {
         e.preventDefault();
 
         // Calculate totals for validation
-        const totalInput = runData?.raw_materials?.reduce((sum, m) => sum + parseFloat(m.quantity_used || 0), 0) || 0;
+        const maxQuantityUsed =
+            Math.max(
+                ...(runData?.raw_materials?.map(m => Number(m.quantity_used ?? 0)) ?? [0])
+            );
 
+        const totalInput = runData?.raw_materials?.reduce((sum, m) => sum + parseFloat(m.quantity_used || 0), 0) || 0;
         const totalWaste = wasteItems.reduce((sum, w) => sum + (parseFloat(w.quantity) || 0), 0);
         const totalReturned = returnedItems.reduce((sum, r) => sum + (parseFloat(r.quantity) || 0), 0);
         const productQty = parseFloat(outputQuantity) || 0;
@@ -139,15 +150,8 @@ const EndProductionModal = ({ isOpen, onClose, onEnd, runData }) => {
         const totalOutput = productQty + totalWaste + totalReturned;
 
         // Validation 1: Product Logic Cap
-        if (productQty > totalInput) {
-            toast.error(`Product quantity (${productQty}) cannot exceed total raw materials used (${totalInput})`);
-            return;
-        }
-
-        // Validation 2: Balance Check (Conservation of Mass)
-        // allowing a small epsilon for floating point math if needed, but strict is better for now
-        if (Math.abs(totalInput - totalOutput) > 0.01) {
-            toast.error(`Production imbalance! Input (${totalInput}) must equal Output (${totalOutput}). Difference: ${(totalInput - totalOutput).toFixed(2)}`);
+        if (productQty > maxQuantityUsed) {
+            toast.error(`Product quantity (${productQty}) cannot exceed total raw materials used (${maxQuantityUsed})`);
             return;
         }
 
@@ -183,6 +187,8 @@ const EndProductionModal = ({ isOpen, onClose, onEnd, runData }) => {
     };
 
     if (!isOpen || !runData) return null;
+
+    console.log('run data', runData)
 
     return (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
