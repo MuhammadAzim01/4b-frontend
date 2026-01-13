@@ -5,6 +5,7 @@ import { useFetchQuery } from '../hooks/useFetchQuery';
 import { fetchWithAuth } from '../utils/fetchApis';
 import { getAuthStatus } from '../utils/auth';
 import PurchaseModal from '../components/PurchaseModal';
+import BulkPurchaseModal from '../components/BulkPurchaseModal';
 import ApprovalModal from '../components/ApprovalModal';
 import ItemHistoryModal from '../components/ItemHistoryModal';
 
@@ -12,6 +13,7 @@ import CreateItemModal from '../components/CreateItemModal';
 
 const Inventory = () => {
     const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
+    const [isBulkPurchaseModalOpen, setIsBulkPurchaseModalOpen] = useState(false);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [approvalItem, setApprovalItem] = useState(null);
     const [historyItem, setHistoryItem] = useState(null);
@@ -132,6 +134,12 @@ const Inventory = () => {
                         className="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 bg-eva-blue text-white gap-2 text-sm font-bold leading-normal tracking-[0.015em] min-w-0 px-4 hover:bg-blue-800 transition-colors">
                         <span className="material-symbols-outlined text-base">add_shopping_cart</span>
                         <span className="truncate">Purchase Stock</span>
+                    </button>
+                    <button
+                        onClick={() => setIsBulkPurchaseModalOpen(true)}
+                        className="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 border border-eva-blue text-eva-blue bg-white gap-2 text-sm font-bold leading-normal tracking-[0.015em] min-w-0 px-4 hover:bg-slate-50 transition-colors">
+                        <span className="material-symbols-outlined text-base">shopping_cart_checkout</span>
+                        <span className="truncate">Bulk Purchase</span>
                     </button>
                 </div>
 
@@ -344,6 +352,12 @@ const Inventory = () => {
                 onClose={() => setIsPurchaseModalOpen(false)}
                 role={role}
                 onOpenCreateModal={handleOpenCreateFromPurchase}
+            />
+
+            <BulkPurchaseModal
+                isOpen={isBulkPurchaseModalOpen}
+                onClose={() => setIsBulkPurchaseModalOpen(false)}
+                role={role}
             />
 
             <CreateItemModal
