@@ -4,6 +4,7 @@ export const menuItems = {
         { icon: "inventory_2", url: "/admin/inventory", name: "Inventory" },
         { icon: "groups", url: "/admin/distributors", name: "Distributors" },
         { icon: "receipt_long", url: "/admin/sales", name: "Sales and Report" },
+        { icon: "local_shipping", url: "/admin/suppliers", name: "Suppliers" },
         { icon: "payments", url: "/admin/expenses", name: "Expenses" },
         { icon: "account_balance_wallet", url: "/admin/balance", name: "Balance" },
         { icon: "precision_manufacturing", url: "/admin/production", name: "Production" },
