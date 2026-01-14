@@ -6,6 +6,7 @@ import ProtectedRoute from './ProtectedRoutes';
 import Dashboard from '../pages/Dashboard';
 import Inventory from '../pages/Inventory';
 import Distributors from '../pages/Distributors';
+import Suppliers from '../pages/Suppliers';
 import Sales from '../pages/Sales';
 import Financials from '../pages/Financials';
 import Production from '../pages/Production';
@@ -22,6 +23,7 @@ export default function AdminRoutes() {
                     <Route path="home" element={<Dashboard />} />
                     <Route path="inventory" element={<Inventory />} />
                     <Route path="distributors" element={<Distributors />} />
+                    <Route path="suppliers" element={<Suppliers />} />
                     <Route path="sales" element={<Sales />} />
                     <Route path="expenses" element={<Expenses />} />
                     <Route path="balance" element={<Balance />} />
