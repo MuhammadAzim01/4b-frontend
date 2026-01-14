@@ -11,7 +11,8 @@ const PurchaseModal = ({ isOpen, onClose, role, onOpenCreateModal }) => {
         quantity: '',
         unitValue: '',
         category: 'raw_materials',
-        note: ''
+        note: '',
+        amountPaid: ''
     });
     const [isCustomSupplier, setIsCustomSupplier] = useState(false);
     const [itemSearch, setItemSearch] = useState('');
@@ -69,7 +70,7 @@ const PurchaseModal = ({ isOpen, onClose, role, onOpenCreateModal }) => {
             } else {
                 setFormData(prev => ({ ...prev, name: value }));
             }
-        } else if (name === 'quantity' || name === 'unitValue') {
+        } else if (name === 'quantity' || name === 'unitValue' || name === 'amountPaid') {
             // Prevent negative values
             if (value === '' || parseFloat(value) >= 0) {
                 setFormData(prev => ({ ...prev, [name]: value }));
@@ -100,6 +101,8 @@ const PurchaseModal = ({ isOpen, onClose, role, onOpenCreateModal }) => {
             supplier: formData.supplier,
             quantity: Number(formData.quantity),
             unit_cost: role === 'admin' ? Number(formData.unitValue) : 0,
+            amount_paid: role === 'admin' ? (formData.amountPaid ? Number(formData.amountPaid) : 0) : 0,
+            pending_amount: role === 'admin' ? (Number(totalCost) - (formData.amountPaid ? Number(formData.amountPaid) : 0)).toFixed(2) : 0,
             notes: formData.note
         };
 
@@ -212,6 +215,31 @@ const PurchaseModal = ({ isOpen, onClose, role, onOpenCreateModal }) => {
                             </div>
                         )}
                     </div>
+
+                    {role === 'admin' && (
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Amount Paid (Rs.)</label>
+                                <input
+                                    type="number"
+                                    name="amountPaid"
+                                    value={formData.amountPaid}
+                                    min={0}
+                                    onChange={handleChange}
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white dark:bg-background-dark dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-eva-blue focus:border-transparent outline-none transition"
+                                    placeholder="0.00"
+                                />
+                            </div>
+                            <div className="flex flex-col justify-end">
+                                <div className="p-2 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+                                    <span className="block text-xs font-semibold text-slate-500 dark:text-slate-400">Pending Amount</span>
+                                    <span className={`block text-lg font-bold ${(Number(totalCost) - (formData.amountPaid ? Number(formData.amountPaid) : 0)) > 0 ? 'text-red-500' : 'text-green-500'}`}>
+                                        Rs. {(Number(totalCost) - (formData.amountPaid ? Number(formData.amountPaid) : 0)).toFixed(2)}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {role === 'admin' && (
                         <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
