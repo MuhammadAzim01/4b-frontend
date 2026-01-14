@@ -6,13 +6,10 @@ import { fetchWithAuth } from '../utils/fetchApis';
 import { getAuthStatus } from '../utils/auth';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import AddSupplierModal from '../components/AddSupplierModal';
-import InventoryInvoiceDetailsModal from '../components/InventoryInvoiceDetailsModal';
 
 const Suppliers = () => {
     const [activeTab, setActiveTab] = useState('history');
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-    const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
-    const [selectedInvoice, setSelectedInvoice] = useState(null);
     const [selectedSupplier, setSelectedSupplier] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [transactionPage, setTransactionPage] = useState(1);
@@ -76,11 +73,6 @@ const Suppliers = () => {
     const handleSelectSupplier = (supplier) => {
         setSelectedSupplier(supplier);
         setTransactionPage(1);
-    };
-
-    const handleInvoiceClick = (invoice) => {
-        setSelectedInvoice(invoice);
-        setIsDetailsModalOpen(true);
     };
 
     // Derived stats from supplier object if available, or just display static/calculated
@@ -215,12 +207,12 @@ const Suppliers = () => {
                                             <table className="w-full text-left text-sm">
                                                 <thead className="bg-slate-50 dark:bg-gray-800 border-b border-slate-200 dark:border-gray-700">
                                                     <tr>
-                                                        <th className="px-4 py-3 text-xs font-medium uppercase text-slate-700 dark:text-gray-300">Invoice #</th>
                                                         <th className="px-4 py-3 text-xs font-medium uppercase text-slate-700 dark:text-gray-300">Date</th>
-                                                        <th className="px-4 py-3 text-xs font-medium uppercase text-slate-700 dark:text-gray-300">Type</th>
+                                                        <th className="px-4 py-3 text-xs font-medium uppercase text-slate-700 dark:text-gray-300">Item</th>
+                                                        <th className="px-4 py-3 text-xs font-medium uppercase text-slate-700 dark:text-gray-300">Quantity</th>
                                                         <th className="px-4 py-3 text-xs font-medium uppercase text-slate-700 dark:text-gray-300 text-right">Total Cost</th>
                                                         <th className="px-4 py-3 text-xs font-medium uppercase text-slate-700 dark:text-gray-300 text-right">Paid</th>
-                                                        <th className="px-4 py-3 text-xs font-medium uppercase text-slate-700 dark:text-gray-300 text-right">Due</th>
+                                                        <th className="px-4 py-3 text-xs font-medium uppercase text-slate-700 dark:text-gray-300 text-right">Pending</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -231,32 +223,23 @@ const Suppliers = () => {
                                                             </td>
                                                         </tr>
                                                     ) : (
-                                                        transactions.map((invoice) => (
+                                                        transactions.map((t) => (
                                                             <tr
-                                                                key={invoice.id}
-                                                                onClick={() => handleInvoiceClick(invoice)}
-                                                                className="border-b border-slate-200 dark:border-gray-700 hover:bg-slate-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer group"
+                                                                key={t.id}
+                                                                className="border-b border-slate-200 dark:border-gray-700 hover:bg-slate-50 dark:hover:bg-gray-800/50 transition-colors"
                                                             >
-                                                                <td className="px-4 py-3">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <span className="font-mono text-xs text-eva-blue font-medium group-hover:underline">{invoice.id}</span>
-                                                                        {invoice.transaction_type === 'payment' && invoice.related_invoice_number && (
-                                                                            <span className="text-xs text-slate-500 dark:text-slate-400">→ {invoice.related_invoice_number}</span>
-                                                                        )}
-                                                                    </div>
+                                                                <td className="px-4 py-3 text-slate-500 dark:text-gray-400">{new Date(t.transaction_date).toLocaleDateString()}</td>
+                                                                <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{t.item?.name || t.item_name}</td>
+                                                                <td className="px-4 py-3 text-slate-500 dark:text-gray-400">{t.quantity}</td>
+                                                                <td className="px-4 py-3 text-right font-mono text-slate-900 dark:text-white">
+                                                                    Rs. {(Number(t.quantity) * Number(t.unit_cost)).toFixed(2)}
                                                                 </td>
-                                                                <td className="px-4 py-3 text-slate-500 dark:text-gray-400">{new Date(invoice.created_at).toLocaleDateString()}</td>
-                                                                <td className="px-4 py-3">
-                                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${invoice.transaction_type === 'sale'
-                                                                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300'
-                                                                        : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
-                                                                        }`}>
-                                                                        {invoice.transaction_type === 'sale' ? 'Sale' : 'Payment'}
-                                                                    </span>
+                                                                <td className="px-4 py-3 text-right font-mono text-green-600 dark:text-green-400">
+                                                                    Rs. {Number(t.amount_paid || 0).toFixed(2)}
                                                                 </td>
-                                                                <td className="px-4 py-3 text-right font-mono text-slate-900 dark:text-white">Rs. {parseFloat(invoice.total_amount).toFixed(2)}</td>
-                                                                <td className="px-4 py-3 text-right font-mono text-green-600 dark:text-green-400">Rs. {parseFloat(invoice.amount_paid).toFixed(2)}</td>
-                                                                <td className="px-4 py-3 text-right font-mono text-red-600 dark:text-red-400">Rs. {parseFloat(invoice.balance_due).toFixed(2)}</td>
+                                                                <td className="px-4 py-3 text-right font-mono text-red-600 dark:text-red-400">
+                                                                    Rs. {Number(t.pending_amount || 0).toFixed(2)}
+                                                                </td>
                                                             </tr>
                                                         ))
                                                     )}
@@ -303,11 +286,6 @@ const Suppliers = () => {
                 isOpen={isAddModalOpen}
                 onClose={() => setIsAddModalOpen(false)}
                 onSave={handleAddSupplier}
-            />
-            <InventoryInvoiceDetailsModal
-                isOpen={isDetailsModalOpen}
-                onClose={() => setIsDetailsModalOpen(false)}
-                invoice={selectedInvoice}
             />
         </div>
     );
