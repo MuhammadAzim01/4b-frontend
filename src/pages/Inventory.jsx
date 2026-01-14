@@ -6,7 +6,7 @@ import { fetchWithAuth } from '../utils/fetchApis';
 import { getAuthStatus } from '../utils/auth';
 import PurchaseModal from '../components/PurchaseModal';
 import BulkPurchaseModal from '../components/BulkPurchaseModal';
-import ApprovalModal from '../components/ApprovalModal';
+import SupplierInvoiceApprovalModal from '../components/SupplierInvoiceApprovalModal';
 import ItemHistoryModal from '../components/ItemHistoryModal';
 
 import CreateItemModal from '../components/CreateItemModal';
@@ -15,7 +15,7 @@ const Inventory = () => {
     const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
     const [isBulkPurchaseModalOpen, setIsBulkPurchaseModalOpen] = useState(false);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-    const [approvalItem, setApprovalItem] = useState(null);
+    const [approvalInvoice, setApprovalInvoice] = useState(null);
     const [historyItem, setHistoryItem] = useState(null);
     const [activeTab, setActiveTab] = useState('raw_materials');
     const { role } = getAuthStatus()?.user || 'accountant';
@@ -39,16 +39,18 @@ const Inventory = () => {
         staleTime: 2 * 60 * 1000,
     });
 
+    const { data: invoicesData } = useFetchQuery({
+        url: `inventory/invoices/?transaction_type=sale&status=pending&page=${pendingPage}&page_size=20`,
+        queryKey: ['inventory-invoices', pendingPage],
+        fetchFunction: fetchWithAuth,
+        staleTime: 2 * 60 * 1000,
+    });
     const { data: pendingItems } = useFetchQuery({
         url: `inventory/transactions/?category=${activeTab}&status=pending&page=${pendingPage}&page_size=20`,
         queryKey: ['transactions', activeTab, pendingPage],
         fetchFunction: fetchWithAuth,
         staleTime: 2 * 60 * 1000,
     });
-
-    const handlePurchaseClick = () => {
-        setIsPurchaseModalOpen(true);
-    };
 
     const handleOpenCreateFromPurchase = () => {
         setIsCreateModalOpen(true);
@@ -58,10 +60,9 @@ const Inventory = () => {
         setIsCreateModalOpen(true);
     };
 
-    const handleApproveClick = (entry) => {
-        console.log('Approving entry:', entry);
-        console.log('Entry', !!entry ? entry.id : 'No entry provided');
-        setApprovalItem(entry);
+    const handleApproveClick = (invoice) => {
+        setApprovalInvoice(invoice);
+        console.log('Approving invoice:', invoice);
     };
 
     const handleItemClick = (item) => {
@@ -69,7 +70,8 @@ const Inventory = () => {
     };
 
     const filteredInventory = data?.results || [];
-    const filteredPending = pendingItems?.results || [];
+    const pendingInvoices = invoicesData?.results || [];
+        const filteredPending = pendingItems?.results || [];
 
     return (
         <div className="flex-1 overflow-y-auto p-8">
@@ -130,12 +132,6 @@ const Inventory = () => {
                         </button>
                     </div>
                     <button
-                        onClick={handlePurchaseClick}
-                        className="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 bg-eva-blue text-white gap-2 text-sm font-bold leading-normal tracking-[0.015em] min-w-0 px-4 hover:bg-blue-800 transition-colors">
-                        <span className="material-symbols-outlined text-base">add_shopping_cart</span>
-                        <span className="truncate">Purchase Stock</span>
-                    </button>
-                    <button
                         onClick={() => setIsBulkPurchaseModalOpen(true)}
                         className="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 border border-eva-blue text-eva-blue bg-white gap-2 text-sm font-bold leading-normal tracking-[0.015em] min-w-0 px-4 hover:bg-slate-50 transition-colors">
                         <span className="material-symbols-outlined text-base">shopping_cart_checkout</span>
@@ -176,7 +172,7 @@ const Inventory = () => {
 
                 {/* Pending Approvals (Admin Only) */}
                 {/* Pending Approvals (Admin Only) */}
-                {role === 'admin' && (pendingItems?.results?.length > 0 || pendingItems?.count > 0) && (
+                {role === 'admin' && (pendingInvoices.length > 0 || invoicesData?.count > 0) && (
                     <div className="mb-8">
                         <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
                             <span className="material-symbols-outlined text-orange-500">pending_actions</span>
@@ -186,23 +182,21 @@ const Inventory = () => {
                             <table className="w-full text-left">
                                 <thead className="bg-orange-100 dark:bg-orange-900/20">
                                     <tr className="border-b border-orange-200 dark:border-orange-800">
-                                        <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Item Name</th>
-                                        <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Quantity</th>
+                                        <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Invoice #</th>
                                         <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Supplier</th>
                                         <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Date</th>
                                         <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-orange-200 dark:divide-orange-800">
-                                    {filteredPending.map((entry) => (
-                                        <tr key={entry.id}>
-                                            <td className="px-4 py-3 text-slate-900 dark:text-white text-sm">{entry.item.name}</td>
-                                            <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">{entry.quantity} {entry.item.unit}</td>
-                                            <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">{entry.supplier.name || '-'}</td>
-                                            <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">{new Date(entry.transaction_date).toLocaleDateString()}</td>
+                                    {pendingInvoices.map((inv) => (
+                                        <tr key={inv.id}>
+                                            <td className="px-4 py-3 text-slate-900 dark:text-white text-sm font-mono">#{inv.id}</td>
+                                            <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">{inv.supplier_name || inv.supplier?.name || '-'}</td>
+                                            <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">{new Date(inv.created_at).toLocaleDateString()}</td>
                                             <td className="px-4 py-3 text-sm">
                                                 <button
-                                                    onClick={() => handleApproveClick(entry)}
+                                                    onClick={() => handleApproveClick(inv)}
                                                     className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold bg-eva-blue text-white hover:bg-blue-800 transition-colors"
                                                 >
                                                     Approve & Price
@@ -213,25 +207,25 @@ const Inventory = () => {
                                 </tbody>
                             </table>
                             {/* Pending Items Pagination Controls */}
-                            {pendingItems?.count > 0 && (
+                            {invoicesData?.count > 0 && (
                                 <div className="p-4 flex items-center justify-between border-t border-orange-200 dark:border-orange-800">
                                     <div className="text-sm text-slate-500 dark:text-slate-400">
-                                        Showing {((pendingPage - 1) * 20) + 1} to {Math.min(pendingPage * 20, pendingItems.count)} of {pendingItems.count} items
+                                        Showing {((pendingPage - 1) * 20) + 1} to {Math.min(pendingPage * 20, invoicesData.count)} of {invoicesData.count} invoices
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <button
                                             onClick={() => setPendingPage(p => Math.max(1, p - 1))}
-                                            disabled={!pendingItems.previous}
+                                            disabled={!invoicesData?.previous}
                                             className="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                         >
                                             <span className="material-symbols-outlined text-base">chevron_left</span>
                                         </button>
                                         <div className="flex items-center px-3 text-sm font-medium text-slate-700 dark:text-slate-300">
-                                            Page {pendingPage} of {Math.max(1, Math.ceil(pendingItems.count / 20))}
+                                            Page {pendingPage} of {Math.max(1, Math.ceil((invoicesData?.count || 0) / 20))}
                                         </div>
                                         <button
                                             onClick={() => setPendingPage(p => p + 1)}
-                                            disabled={!pendingItems.next}
+                                            disabled={!invoicesData?.next}
                                             className="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                         >
                                             <span className="material-symbols-outlined text-base">chevron_right</span>
@@ -365,10 +359,10 @@ const Inventory = () => {
                 onClose={() => setIsCreateModalOpen(false)}
             />
 
-            <ApprovalModal
-                isOpen={!!approvalItem}
-                onClose={() => setApprovalItem(null)}
-                entry={approvalItem}
+            <SupplierInvoiceApprovalModal
+                isOpen={!!approvalInvoice}
+                onClose={() => setApprovalInvoice(null)}
+                invoice={approvalInvoice}
             />
 
             <ItemHistoryModal
