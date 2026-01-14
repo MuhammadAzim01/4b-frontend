@@ -107,21 +107,37 @@ const InventoryInvoiceDetailsModal = ({ isOpen, onClose, invoice, role }) => {
                         <div className="space-y-2">
                             <div className="flex justify-between items-center text-sm">
                                 <span className="text-slate-700 dark:text-slate-300">Total Amount</span>
-                                <span className="font-mono font-bold text-slate-900 dark:text-white">Rs. {totalAmount.toFixed(2)}</span>
+                                <span className="font-mono font-bold text-slate-900 dark:text-white">Rs. {parseFloat(invoice.total_amount).toFixed(2)}</span>
                             </div>
 
-                            <div className="flex justify-between items-center text-sm">
-                                <span className="text-slate-700 dark:text-slate-300">Amount Paid</span>
-                                <span className="font-mono font-semibold text-green-600 dark:text-green-400">Rs. {amountPaid.toFixed(2)}</span>
+                            <div className="flex justify-between items-center text-sm pt-2">
+                                <span className="text-slate-700 dark:text-slate-300">
+                                    Cash/Bank Payment
+                                    {invoice.payment_method && <span className="ml-2 bg-blue-100 text-blue-800 text-[10px] px-2 py-0.5 rounded-full">{invoice.payment_method}</span>}
+                                </span>
+                                <span className="font-mono font-semibold text-green-600 dark:text-green-400">Rs. {invoice.amount_paid}</span>
                             </div>
 
+                            {isSale && invoice.payment_invoices && invoice.payment_invoices.length > 0 && (
+                                <div className="pt-2 border-t border-blue-200 dark:border-blue-800">
+                                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">Payment History</p>
+                                    {invoice.payment_invoices.map((payment) => (
+                                        <div key={payment.id} className="flex justify-between items-center text-sm mb-1">
+                                            <span className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                                                {payment.id} - {new Date(payment.created_at).toLocaleDateString()}
+                                            </span>
+                                            <span className="font-mono text-sm font-semibold text-green-600 dark:text-green-400">Rs. {parseFloat(payment.amount_paid).toFixed(2)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                             <div className="flex justify-between items-center pt-2 border-t border-blue-200 dark:border-blue-800">
                                 <span className="text-sm font-bold text-slate-900 dark:text-white">Balance Due</span>
-                                <span className={`text-lg font-mono font-bold ${balanceDue > 0
+                                <span className={`text-lg font-mono font-bold ${parseFloat(invoice.balance_due) > 0
                                         ? 'text-red-600 dark:text-red-400'
                                         : 'text-green-600 dark:text-green-400'
                                     }`}>
-                                    Rs. {balanceDue.toFixed(2)}
+                                    Rs. {parseFloat(invoice.balance_due).toFixed(2)}
                                 </span>
                             </div>
                         </div>

@@ -59,6 +59,33 @@ export const generateInventoryInvoiceHtml = (invoice) => {
           .notes-section { background: #f8fafc; padding: 20px; border-radius: 8px; border-left: 4px solid #2563eb; margin: 30px 0; }
           .notes-title { font-size: 12px; color: #64748b; font-weight: 600; text-transform: uppercase; margin-bottom: 8px; }
           .notes-content { font-size: 14px; color: #1e293b; line-height: 1.6; white-space: pre-wrap; }
+               .payment-history {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid #cbd5e1;
+          }
+          .payment-history-title {
+            font-size: 11px;
+            color: #64748b;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+          }
+          .payment-history-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            font-size: 13px;
+          }
+          .payment-history-item .date {
+            font-family: 'Courier New', monospace;
+            color: #64748b;
+          }
+          .payment-history-item .amount {
+            font-family: 'Courier New', monospace;
+            font-weight: 600;
+            color: #16a34a;
+          }
           .footer { margin-top: 60px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 20px; }
           @media print { body { padding: 20px; } .no-print { display: none; } }
         </style>
@@ -121,9 +148,23 @@ export const generateInventoryInvoiceHtml = (invoice) => {
             <span class="payment-label">Amount Paid</span>
             <span class="payment-value paid">Rs. ${parseFloat(invoice.amount_paid || 0).toFixed(2)}</span>
           </div>
+           ${isSale && invoice.payment_invoices && invoice.payment_invoices.length > 0 ? `
+          <div class="payment-history">
+            <div class="payment-history-title">Payment History</div>
+            ${invoice.payment_invoices.map(payment => `
+              <div class="payment-history-item">
+                <span class="date">${payment.id} - ${new Date(payment.created_at).toLocaleDateString()}</span>
+                <span class="amount">Rs. ${parseFloat(payment.amount_paid).toFixed(2)}</span>
+              </div>
+            `).join('')}
+          </div>
+          ` : ''}
+          
           <div class="payment-row total">
             <span class="payment-label" style="font-weight: 600; font-size: 16px;">Balance Due</span>
-            <span class="payment-value ${parseFloat(invoice.balance_due || 0) > 0 ? 'due' : 'paid'}" style="font-size: 22px;">Rs. ${parseFloat(invoice.balance_due || 0).toFixed(2)}</span>
+            <span class="payment-value ${parseFloat(invoice.balance_due) > 0 ? 'due' : 'paid'}" style="font-size: 22px;">
+              Rs. ${parseFloat(invoice.balance_due).toFixed(2)}
+            </span>
           </div>
         </div>
 

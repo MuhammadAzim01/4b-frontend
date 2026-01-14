@@ -7,6 +7,7 @@ import { getAuthStatus } from '../utils/auth';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import AddSupplierModal from '../components/AddSupplierModal';
 import InventoryInvoiceDetailsModal from '../components/InventoryInvoiceDetailsModal';
+import SupplierPaymentModal from '../components/SupplierPaymentModal';
 
 const Suppliers = () => {
     const [activeTab, setActiveTab] = useState('history');
@@ -16,6 +17,7 @@ const Suppliers = () => {
     const [selectedSupplier, setSelectedSupplier] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [transactionPage, setTransactionPage] = useState(1);
+    const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
     const { user } = getAuthStatus();
     const isAdmin = user?.role === 'admin';
@@ -26,16 +28,6 @@ const Suppliers = () => {
         queryKey: ['suppliers', searchQuery],
         fetchFunction: fetchWithAuth,
     });
-
-    // Fetch transactions for selected supplier
-    // Assuming endpoint: inventory/transactions/?supplier={id}
-    const getTransactionUrl = () => {
-        if (!selectedSupplier) return null;
-        let url = `inventory/transactions/?supplier=${selectedSupplier.id}&page=${transactionPage}&page_size=10`;
-        // Assuming we can filter by pending/completed or purchase? The prompt asked for "paid amount, pending amount"
-        // Transactions usually have this info.
-        return url;
-    };
 
     const getInvoiceUrl = () => {
         if (!selectedSupplier) return null;
@@ -195,6 +187,15 @@ const Suppliers = () => {
                                             {/* Assuming 'balance' field is present and positive means we owe them */}
                                             Rs. {Math.abs(Number(selectedSupplier.balance || 0)).toFixed(2)}
                                         </p>
+                                        <div className="mt-3 flex justify-end">
+                                            <button
+                                                onClick={() => setIsPaymentModalOpen(true)}
+                                                className="inline-flex items-center gap-2 h-9 px-3 text-sm font-bold text-white rounded-lg bg-eva-blue hover:bg-blue-800 transition-colors"
+                                            >
+                                                <span className="material-symbols-outlined text-base">payments</span>
+                                                Record Payment
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -308,6 +309,11 @@ const Suppliers = () => {
                 isOpen={isDetailsModalOpen}
                 onClose={() => setIsDetailsModalOpen(false)}
                 invoice={selectedInvoice}
+            />
+            <SupplierPaymentModal
+                isOpen={isPaymentModalOpen}
+                onClose={() => setIsPaymentModalOpen(false)}
+                supplier={selectedSupplier}
             />
         </div>
     );
