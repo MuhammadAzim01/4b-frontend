@@ -12,6 +12,7 @@ import Financials from '../pages/Financials';
 import Production from '../pages/Production';
 import Warehouse from '../pages/Warehouse';
 import Employee from '../pages/Employee';
+import Bottles from '../pages/Bottles';
 import Expenses from '../pages/Expenses';
 import Balance from '../pages/Balance';
 
@@ -31,6 +32,7 @@ export default function AdminRoutes() {
                     <Route path="production/:batchNumber" element={<Production />} />
                     <Route path="warehouse" element={<Warehouse />} />
                     <Route path="employee" element={<Employee />} />
+                    <Route path="bottles" element={<Bottles />} />
                     <Route path="*" element={<Navigate to="home" replace />} />
                 </Route>
             </Route>

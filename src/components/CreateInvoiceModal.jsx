@@ -41,7 +41,7 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
             setAmountPaid('');
             setSelectedInvoices([]);
             setNotes('');
-            setItems([{ id: Date.now(), product: '', quantity: '', unitPrice: '' }]);
+            setItems([{ id: Date.now(), product: '', quantity: '', unitPrice: '', isBottlePaid: false }]);
             setInvoiceSearch('');
             setIsFocEnabled(false);
             setFocItems([{ id: Date.now(), product: '', quantity: '', unitPrice: '' }]);
@@ -51,7 +51,7 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
     }, [isOpen]);
 
     const handleAddItem = () => {
-        setItems([...items, { id: Date.now(), product: '', quantity: '', unitPrice: '' }]);
+        setItems([...items, { id: Date.now(), product: '', quantity: '', unitPrice: '', isBottlePaid: false }]);
     };
 
     const handleRemoveItem = (id) => {
@@ -129,7 +129,8 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                 .map(item => ({
                     product: parseInt(item.product),
                     quantity: parseFloat(item.quantity),
-                    unit_price: parseFloat(item.unitPrice)
+                    unit_price: parseFloat(item.unitPrice),
+                    is_bottle_paid: item.isBottlePaid || false
                 }));
 
             // Add FOC items with 0 price if enabled
@@ -272,52 +273,72 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                                     </button>
                                 </div>
                                 {items.map((item) => (
-                                    <div key={item.id} className="flex gap-2 mb-2">
-                                        <select
-                                            required={!isFocEnabled}
-                                            value={item.product}
-                                            onChange={(e) => handleItemChange(item.id, 'product', e.target.value)}
-                                            className="flex-1 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
-                                        >
-                                            <option value="">Select Product</option>
-                                            {products?.results?.map(p => (
-                                                <option key={p.id} value={p.id}>{p.name} (Avl: {p.available_quantity})</option>
-                                            ))}
-                                        </select>
-                                        <input
-                                            required={!isFocEnabled}
-                                            type="number"
-                                            placeholder="Qty(per pack)"
-                                            min="0.01"
-                                            step="0.01"
-                                            value={item.quantity}
-                                            onChange={(e) => handleItemChange(item.id, 'quantity', e.target.value)}
-                                            className="w-24 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
-                                        />
-                                        <input
-                                            required={!isFocEnabled}
-                                            type="number"
-                                            placeholder="Price (per pack)"
-                                            min="0"
-                                            step="0.01"
-                                            value={item.unitPrice}
-                                            onChange={(e) => {
-                                                const val = e.target.value;
-                                                if (val === '' || parseFloat(val) >= 0) {
-                                                    handleItemChange(item.id, 'unitPrice', val);
-                                                }
-                                            }}
-                                            className="w-28 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
-                                        />
-                                        {items.length > 1 && (
-                                            <button
-                                                type="button"
-                                                onClick={() => handleRemoveItem(item.id)}
-                                                className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
+                                    <div key={item.id} className="flex flex-col gap-2 mb-2 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                                        <div className="flex gap-2">
+                                            <select
+                                                required={!isFocEnabled}
+                                                value={item.product}
+                                                onChange={(e) => handleItemChange(item.id, 'product', e.target.value)}
+                                                className="flex-1 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
                                             >
-                                                <span className="material-symbols-outlined text-lg">delete</span>
-                                            </button>
-                                        )}
+                                                <option value="">Select Product</option>
+                                                {products?.results?.map(p => (
+                                                    <option key={p.id} value={p.id}>{p.name} (Avl: {p.available_quantity})</option>
+                                                ))}
+                                            </select>
+                                            <input
+                                                required={!isFocEnabled}
+                                                type="number"
+                                                placeholder="Qty"
+                                                min="0.01"
+                                                step="0.01"
+                                                value={item.quantity}
+                                                onChange={(e) => handleItemChange(item.id, 'quantity', e.target.value)}
+                                                className="w-20 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
+                                            />
+                                            <input
+                                                required={!isFocEnabled}
+                                                type="number"
+                                                placeholder="Price"
+                                                min="0"
+                                                step="0.01"
+                                                value={item.unitPrice}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    if (val === '' || parseFloat(val) >= 0) {
+                                                        handleItemChange(item.id, 'unitPrice', val);
+                                                    }
+                                                }}
+                                                className="w-24 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm"
+                                            />
+                                            {items.length > 1 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveItem(item.id)}
+                                                    className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
+                                                >
+                                                    <span className="material-symbols-outlined text-lg">delete</span>
+                                                </button>
+                                            )}
+                                        </div>
+                                        {/* Check if selected product is 19L */}
+                                        {(() => {
+                                            const selectedProduct = products?.results?.find(p => p.id.toString() === item.product.toString());
+                                            if (selectedProduct && (selectedProduct.name.includes('19L') || selectedProduct.name.toLowerCase().includes('bottle'))) {
+                                                return (
+                                                    <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer w-fit">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={item.isBottlePaid}
+                                                            onChange={(e) => handleItemChange(item.id, 'isBottlePaid', e.target.checked)}
+                                                            className="rounded border-slate-300 text-eva-blue focus:ring-eva-blue"
+                                                        />
+                                                        <span>Customer paid for empty bottle?</span>
+                                                    </label>
+                                                );
+                                            }
+                                            return null;
+                                        })()}
                                     </div>
                                 ))}
                             </div>

@@ -9,6 +9,7 @@ export const menuItems = {
         { icon: "account_balance_wallet", url: "/admin/balance", name: "Balance" },
         { icon: "precision_manufacturing", url: "/admin/production", name: "Production" },
         { icon: "warehouse", url: "/admin/warehouse", name: "Warehouse" },
+        { icon: "recycling", url: "/admin/bottles", name: "Bottles" },
         { icon: "badge", url: "/admin/employee", name: "Employee & HR" },
     ],
     accountant: [

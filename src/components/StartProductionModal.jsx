@@ -16,6 +16,13 @@ const StartProductionModal = ({ isOpen, onClose, onStart }) => {
         enabled: isOpen,
     });
 
+    const { data: returnableAssets, isFetching: isFetchingAssets } = useFetchQuery({
+        url: 'inventory/items/?category=returnable_assets',
+        queryKey: ['returnable_assets'],
+        fetchFunction: fetchWithAuth,
+        enabled: isOpen,
+    });
+
     const handleTabChange = (tab) => {
         setActiveTab(tab);
         // Reset to single material row when switching tabs
@@ -32,9 +39,15 @@ const StartProductionModal = ({ isOpen, onClose, onStart }) => {
         }
     };
 
+    // Combine raw materials and returnable assets
+    const allMaterials = [
+        ...(rawMaterials?.results || []),
+        ...(returnableAssets?.results || [])
+    ];
+
     // Get max quantity for a material
     const getMaxQuantity = (materialId) => {
-        const material = rawMaterials?.results?.find(item => item.id.toString() === materialId);
+        const material = allMaterials.find(item => item.id.toString() === materialId);
         return material ? parseFloat(material.available_quantity) : 0;
     };
 
@@ -57,7 +70,7 @@ const StartProductionModal = ({ isOpen, onClose, onStart }) => {
     };
 
     const handleMaxClick = (id, materialId) => {
-        const material = rawMaterials?.results?.find(item => item.id.toString() === materialId);
+        const material = allMaterials.find(item => item.id.toString() === materialId);
         if (material) {
             handleMaterialChange(id, 'quantity', material.available_quantity);
         }
@@ -72,9 +85,12 @@ const StartProductionModal = ({ isOpen, onClose, onStart }) => {
         }
 
         const selectedIds = materials.map(m => m.materialId).filter(id => id !== currentMaterialId);
-        return rawMaterials?.results?.filter(item =>
+
+        // Return both raw materials and returnable assets
+        // We can group them in the select using <optgroup> if needed, but for now flat list is fine
+        return allMaterials.filter(item =>
             !selectedIds.includes(item.id.toString()) && parseFloat(item.available_quantity) > 0
-        ) || [];
+        );
     };
 
     const handleSubmit = (e) => {
