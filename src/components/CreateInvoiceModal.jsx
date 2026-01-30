@@ -126,12 +126,26 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
         if (transactionType === 'sale') {
             const formattedItems = items
                 .filter(item => item.product && item.quantity)
-                .map(item => ({
-                    product: parseInt(item.product),
-                    quantity: parseFloat(item.quantity),
-                    unit_price: parseFloat(item.unitPrice),
-                    is_bottle_paid: item.isBottlePaid || false
-                }));
+                .map(item => {
+                    // Find product definition to check if it's a bottle
+                    // item.product is string from select, ensure comparison works
+                    const productDef = products?.results?.find(p => p.id.toString() === item.product.toString());
+                    const is19LBottle = productDef && (productDef.name.includes('19L') || productDef.name.toLowerCase().includes('bottle'));
+
+                    const payload = {
+                        product: parseInt(item.product),
+                        quantity: parseFloat(item.quantity),
+                        unit_price: parseFloat(item.unitPrice),
+                    };
+
+                    // Only add bottle tracking fields for 19L bottles
+                    if (is19LBottle) {
+                        payload.bottles_delivered = parseFloat(item.quantity);
+                        payload.is_bottles_paid = item.isBottlePaid || false;
+                    }
+
+                    return payload;
+                });
 
             // Add FOC items with 0 price if enabled
             let formattedFocItems = [];

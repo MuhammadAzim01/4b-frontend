@@ -16,10 +16,9 @@ const Bottles = () => {
     const [returnQuantity, setReturnQuantity] = useState('');
     const [returnNote, setReturnNote] = useState('');
 
-    // Mock History Data (since backend endpoint might not exist yet)
-    // In production: fetch `distributors/${selectedDistributor.id}/logs/?type=bottle`
+    // Fetch Customer Bottle History
     const { data: historyData, isFetching: loadingHistory } = useFetchQuery({
-        url: selectedDistributor ? `distributors/${selectedDistributor.id}/bottles/history/` : null, // Hypothetical endpoint
+        url: selectedDistributor ? `distributors/bottles/?distributor=${selectedDistributor.id}` : null,
         queryKey: ['bottle-history', selectedDistributor?.id],
         fetchFunction: fetchWithAuth,
         enabled: !!selectedDistributor && isHistoryModalOpen
@@ -340,28 +339,35 @@ const Bottles = () => {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-200 dark:divide-gray-700">
-                                        {historyData.results.map((log, idx) => (
-                                            <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
-                                                <td className="px-6 py-3 text-slate-500">
-                                                    {new Date(log.created_at).toLocaleDateString()}
-                                                </td>
-                                                <td className="px-6 py-3 font-medium text-slate-900 dark:text-white">
-                                                    {log.type === 'sale' ? 'Bottle Sale' : 'Bottle Return'}
-                                                    {log.notes && <p className="text-xs text-slate-400 font-normal">{log.notes}</p>}
-                                                </td>
-                                                <td className="px-6 py-3 text-center">
-                                                    <span className={`inline-flex px-2 py-0.5 rounded text-xs font-bold ${log.type === 'sale'
-                                                            ? 'bg-red-100 text-red-700'
-                                                            : 'bg-green-100 text-green-700'
-                                                        }`}>
-                                                        {log.quantity}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-3 text-right font-mono font-bold">
-                                                    {log.type === 'sale' ? '+' : '-'}{log.quantity}
-                                                </td>
-                                            </tr>
-                                        ))}
+                                        {historyData.results.map((log, idx) => {
+                                            // Infer type and quantity if fields vary
+                                            const isSale = log.type === 'sale' || log.bottles_delivered > 0;
+                                            const quantity = log.quantity || log.bottles_delivered || log.bottles_returned || 0;
+                                            const typeLabel = isSale ? 'Bottle Sale' : 'Bottle Return';
+
+                                            return (
+                                                <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
+                                                    <td className="px-6 py-3 text-slate-500">
+                                                        {new Date(log.created_at).toLocaleDateString()}
+                                                    </td>
+                                                    <td className="px-6 py-3 font-medium text-slate-900 dark:text-white">
+                                                        {typeLabel}
+                                                        {log.notes && <p className="text-xs text-slate-400 font-normal">{log.notes}</p>}
+                                                    </td>
+                                                    <td className="px-6 py-3 text-center">
+                                                        <span className={`inline-flex px-2 py-0.5 rounded text-xs font-bold ${isSale
+                                                                ? 'bg-red-100 text-red-700'
+                                                                : 'bg-green-100 text-green-700'
+                                                            }`}>
+                                                            {quantity}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-3 text-right font-mono font-bold">
+                                                        {isSale ? '+' : '-'}{quantity}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                             )}
