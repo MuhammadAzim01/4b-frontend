@@ -331,12 +331,12 @@ const Warehouse = () => {
                                 {/* Display Period Stats if available */}
                                 {product.period_production > 0 && (
                                     <p className="text-[#198754] text-sm font-medium">
-                                        +{product.period_production / product.pack_size} Pack{product.period_production} unit Produced
+                                        +{(product.period_production / product.pack_size).toFixed(2)} Pack {product.period_production} units Produced
                                     </p>
                                 )}
                                 {product.period_adjustments > 0 && (
                                     <p className="text-emerald-600 dark:text-emerald-400 text-sm font-medium">
-                                        +{product.period_adjustments} Added manually
+                                        +{product.period_adjustments} units Added manually
                                     </p>
                                 )}
                                 {product.period_sales > 0 && (
