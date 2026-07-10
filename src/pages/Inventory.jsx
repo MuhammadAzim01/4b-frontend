@@ -8,8 +8,10 @@ import PurchaseModal from '../components/PurchaseModal';
 import BulkPurchaseModal from '../components/BulkPurchaseModal';
 import SupplierInvoiceApprovalModal from '../components/SupplierInvoiceApprovalModal';
 import ItemHistoryModal from '../components/ItemHistoryModal';
-
 import CreateItemModal from '../components/CreateItemModal';
+import { openPrintWindow, fetchAllPages } from '../utils/printWindow';
+import { generateInventoryStatusHtml } from '../utils/inventoryStatusPrint';
+import { toast } from 'sonner';
 
 const Inventory = () => {
     const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
@@ -25,6 +27,7 @@ const Inventory = () => {
     const [statusFilter, setStatusFilter] = useState('');
     const [page, setPage] = useState(1);
     const [pendingPage, setPendingPage] = useState(1);
+    const [isPrinting, setIsPrinting] = useState(false);
 
     // Reset page when filters change
     useEffect(() => {
@@ -67,6 +70,26 @@ const Inventory = () => {
 
     const handleItemClick = (item) => {
         setHistoryItem(item);
+    };
+
+    const handlePrintStatus = async () => {
+        setIsPrinting(true);
+        try {
+            const items = await fetchAllPages(
+                fetchWithAuth,
+                `inventory/items/?category=${activeTab}`
+            );
+            const html = generateInventoryStatusHtml({
+                items,
+                category: activeTab,
+                isAdmin: role === 'admin',
+            });
+            openPrintWindow(html);
+        } catch {
+            toast.error('Failed to prepare inventory report for printing');
+        } finally {
+            setIsPrinting(false);
+        }
     };
 
     const filteredInventory = data?.results || [];
@@ -131,12 +154,22 @@ const Inventory = () => {
                             <span className="text-sm">Filter</span>
                         </button>
                     </div>
-                    <button
-                        onClick={() => setIsBulkPurchaseModalOpen(true)}
-                        className="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 border border-eva-blue text-eva-blue bg-white gap-2 text-sm font-bold leading-normal tracking-[0.015em] min-w-0 px-4 hover:bg-slate-50 transition-colors">
-                        <span className="material-symbols-outlined text-base">shopping_cart_checkout</span>
-                        <span className="truncate">Bulk Purchase</span>
-                    </button>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={handlePrintStatus}
+                            disabled={isPrinting}
+                            className="flex items-center justify-center rounded-lg h-10 border border-slate-300 dark:border-gray-700 bg-white dark:bg-background-dark gap-2 text-sm font-bold min-w-0 px-4 hover:bg-slate-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
+                        >
+                            <span className="material-symbols-outlined text-base">print</span>
+                            <span className="truncate">{isPrinting ? 'Preparing...' : 'Print Status'}</span>
+                        </button>
+                        <button
+                            onClick={() => setIsBulkPurchaseModalOpen(true)}
+                            className="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 border border-eva-blue text-eva-blue bg-white gap-2 text-sm font-bold leading-normal tracking-[0.015em] min-w-0 px-4 hover:bg-slate-50 transition-colors">
+                            <span className="material-symbols-outlined text-base">shopping_cart_checkout</span>
+                            <span className="truncate">Bulk Purchase</span>
+                        </button>
+                    </div>
                 </div>
 
                 {/* Filter Panel */}

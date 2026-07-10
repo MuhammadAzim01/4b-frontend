@@ -1,17 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import CreateProductModal from '../components/CreateProductModal';
+import AddStockModal from '../components/AddStockModal';
 import { useCreateUpdateMutation } from '../hooks/useCreateUpdateMutation';
 import { useFetchQuery } from '../hooks/useFetchQuery';
 import { fetchWithAuth } from '../utils/fetchApis';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { getAuthStatus } from '../utils/auth';
+import { openPrintWindow, fetchAllPages } from '../utils/printWindow';
+import { generateWarehouseLedgerHtml } from '../utils/warehouseLedgerPrint';
+import { toast } from 'sonner';
 
 const Warehouse = () => {
     const navigate = useNavigate();
     const [isLedgerModalOpen, setIsLedgerModalOpen] = useState(false);
     const [isCreateProductModalOpen, setIsCreateProductModalOpen] = useState(false);
+    const [isAddStockModalOpen, setIsAddStockModalOpen] = useState(false);
     const [selectedProduct, setSelectedProduct] = useState(null);
+    const [stockProduct, setStockProduct] = useState(null);
+    const addStockProductIdRef = useRef(null);
 
     // Pagination & Search
     const [page, setPage] = useState(1);
@@ -30,8 +37,10 @@ const Warehouse = () => {
     const [ledgerStartDate, setLedgerStartDate] = useState('');
     const [ledgerEndDate, setLedgerEndDate] = useState('');
     const [ledgerTxType, setLedgerTxType] = useState('all'); // 'all', 'in', 'out'
+    const [isPrintingLedger, setIsPrintingLedger] = useState(false);
 
     const { role } = getAuthStatus()?.user || {};
+    const isAdmin = role === 'admin';
 
     // Debounce Search
     useEffect(() => {
@@ -80,6 +89,21 @@ const Warehouse = () => {
         },
     });
 
+    const addStockMutation = useCreateUpdateMutation({
+        url: () => `warehouse/products/${addStockProductIdRef.current}/add-stock/`,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        fetchFunction: fetchWithAuth,
+        onSuccessMessage: 'Stock added successfully',
+        onErrorMessage: 'Failed to add stock',
+        onSuccess: () => {
+            setIsAddStockModalOpen(false);
+            setStockProduct(null);
+            addStockProductIdRef.current = null;
+            refetchProducts();
+        },
+    });
+
     // Fetch Ledger for selected product
     const getLedgerQueryParams = () => {
         if (!selectedProduct) return null;
@@ -117,6 +141,48 @@ const Warehouse = () => {
 
     const handleCreateProduct = (productData) => {
         createProductMutation.mutate(JSON.stringify(productData));
+    };
+
+    const handleAddStockClick = (product) => {
+        setStockProduct(product);
+        addStockProductIdRef.current = product.id;
+        setIsAddStockModalOpen(true);
+    };
+
+    const handleAddStock = ({ quantity, notes }) => {
+        addStockMutation.mutate(JSON.stringify({ quantity, notes }));
+    };
+
+    const handlePrintLedger = async () => {
+        if (!selectedProduct) return;
+
+        setIsPrintingLedger(true);
+        try {
+            let params = `warehouse/transactions/?item=${selectedProduct.id}`;
+            params += `&date_range=${ledgerFilterType}`;
+            if (ledgerFilterType === 'custom') {
+                if (ledgerStartDate) params += `&start_date=${ledgerStartDate}`;
+                if (ledgerEndDate) params += `&end_date=${ledgerEndDate}`;
+            }
+            if (ledgerTxType !== 'all') {
+                params += `&transaction_type=${ledgerTxType}`;
+            }
+
+            const transactions = await fetchAllPages(fetchWithAuth, params);
+            const html = generateWarehouseLedgerHtml({
+                product: selectedProduct,
+                transactions,
+                filterType: ledgerFilterType,
+                startDate: ledgerStartDate,
+                endDate: ledgerEndDate,
+                txType: ledgerTxType,
+            });
+            openPrintWindow(html);
+        } catch {
+            toast.error('Failed to prepare ledger for printing');
+        } finally {
+            setIsPrintingLedger(false);
+        }
     };
 
     const products = productsData?.results || [];
@@ -234,13 +300,24 @@ const Warehouse = () => {
                                     <h2 className="text-slate-900 dark:text-white text-lg font-bold leading-tight">{product.name}</h2>
                                     <p className="text-sm text-slate-500 dark:text-gray-400">SKU: {product.sku || 'N/A'}</p>
                                 </div>
-                                <button
-                                    onClick={() => handleViewLedgerClick(product)}
-                                    className="text-primary font-medium text-sm flex items-center gap-1 hover:underline group"
-                                >
-                                    View Ledger
-                                    <span className="material-symbols-outlined text-base group-hover:translate-x-1 transition-transform">arrow_forward</span>
-                                </button>
+                                <div className="flex items-center gap-3">
+                                    {isAdmin && (
+                                        <button
+                                            onClick={() => handleAddStockClick(product)}
+                                            className="text-emerald-600 dark:text-emerald-400 font-medium text-sm flex items-center gap-1 hover:underline group"
+                                        >
+                                            <span className="material-symbols-outlined text-base">add_circle</span>
+                                            Add Stock
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => handleViewLedgerClick(product)}
+                                        className="text-primary font-medium text-sm flex items-center gap-1 hover:underline group"
+                                    >
+                                        View Ledger
+                                        <span className="material-symbols-outlined text-base group-hover:translate-x-1 transition-transform">arrow_forward</span>
+                                    </button>
+                                </div>
                             </div>
                             <div className="flex flex-col gap-2 rounded-lg p-5 bg-slate-50 dark:bg-gray-900/50 border border-slate-200 dark:border-gray-800">
                                 <p className="text-slate-500 dark:text-gray-400 text-sm font-medium">
@@ -249,12 +326,17 @@ const Warehouse = () => {
                                         : 'Total Stock on Hand'}
                                 </p>
                                 <p className="text-slate-900 dark:text-white text-3xl font-bold">
-                                    {product.stock_quantity / product.pack_size || 0} Pack <span className="text-xl font-medium text-slate-500">{product.stock_quantity} {product.unit || 'Units'}</span>
+                                {product.pack_size ? (product.stock_quantity / product.pack_size).toFixed(2): '0.00'} Pack <span className="text-xl font-medium text-slate-500">{product.stock_quantity} {product.unit || 'Units'}</span>
                                 </p>
                                 {/* Display Period Stats if available */}
                                 {product.period_production > 0 && (
                                     <p className="text-[#198754] text-sm font-medium">
                                         +{product.period_production / product.pack_size} Pack{product.period_production} unit Produced
+                                    </p>
+                                )}
+                                {product.period_adjustments > 0 && (
+                                    <p className="text-emerald-600 dark:text-emerald-400 text-sm font-medium">
+                                        +{product.period_adjustments} Added manually
                                     </p>
                                 )}
                                 {product.period_sales > 0 && (
@@ -351,7 +433,7 @@ const Warehouse = () => {
                                     className="h-8 pl-2 pr-8 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-medium outline-none focus:ring-1 focus:ring-eva-blue"
                                 >
                                     <option value="all">All Types</option>
-                                    <option value="in">Production Only (IN)</option>
+                                    <option value="in">Stock In (Production & Manual)</option>
                                     <option value="out">Sales Only (OUT)</option>
                                 </select>
                             </div>
@@ -387,7 +469,7 @@ const Warehouse = () => {
                                                     <div className="text-xs text-slate-500">{new Date(txn.transaction_date).toLocaleTimeString()}</div>
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    {txn.transaction_type === 'in' ? (
+                                                    {txn.transaction_type === 'in' && !String(txn.id).startsWith('ADJ-') ? (
                                                         <button
                                                             onClick={() => navigate(`/${role}/production/${txn.id}`)}
                                                             className="text-slate-900 dark:text-white font-mono text-sm font-semibold hover:text-blue-600 dark:hover:text-blue-400 underline decoration-dotted hover:decoration-solid cursor-pointer"
@@ -419,7 +501,15 @@ const Warehouse = () => {
                                 </table>
                             )}
                         </div>
-                        <div className="p-6 border-t border-slate-200 dark:border-slate-800 flex justify-end bg-slate-50 dark:bg-slate-900 rounded-b-xl">
+                        <div className="p-6 border-t border-slate-200 dark:border-slate-800 flex justify-between bg-slate-50 dark:bg-slate-900 rounded-b-xl">
+                            <button
+                                onClick={handlePrintLedger}
+                                disabled={isPrintingLedger || isLedgerLoading}
+                                className="px-6 py-2.5 rounded-xl text-sm font-bold bg-eva-blue hover:bg-blue-800 text-white shadow-sm transition-all disabled:opacity-50 flex items-center gap-2"
+                            >
+                                <span className="material-symbols-outlined text-base">print</span>
+                                {isPrintingLedger ? 'Preparing...' : 'Print Ledger'}
+                            </button>
                             <button onClick={() => setIsLedgerModalOpen(false)} className="px-6 py-2.5 rounded-xl text-sm font-bold bg-white border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 shadow-sm transition-all focus:ring-2 focus:ring-slate-200">Close Ledger</button>
                         </div>
                     </div>
@@ -430,6 +520,18 @@ const Warehouse = () => {
                 isOpen={isCreateProductModalOpen}
                 onClose={() => setIsCreateProductModalOpen(false)}
                 onCreate={handleCreateProduct}
+            />
+
+            <AddStockModal
+                isOpen={isAddStockModalOpen}
+                onClose={() => {
+                    setIsAddStockModalOpen(false);
+                    setStockProduct(null);
+                    addStockProductIdRef.current = null;
+                }}
+                onAdd={handleAddStock}
+                product={stockProduct}
+                isLoading={addStockMutation.isLoading}
             />
         </div>
     );
