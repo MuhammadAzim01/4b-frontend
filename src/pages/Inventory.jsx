@@ -9,15 +9,19 @@ import BulkPurchaseModal from '../components/BulkPurchaseModal';
 import SupplierInvoiceApprovalModal from '../components/SupplierInvoiceApprovalModal';
 import ItemHistoryModal from '../components/ItemHistoryModal';
 import CreateItemModal from '../components/CreateItemModal';
+import ApprovalModal from '../components/ApprovalModal';
 import { openPrintWindow, fetchAllPages } from '../utils/printWindow';
 import { generateInventoryStatusHtml } from '../utils/inventoryStatusPrint';
 import { toast } from 'sonner';
+import DeductionModal from '../components/DeductionModal';
 
 const Inventory = () => {
     const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
     const [isBulkPurchaseModalOpen, setIsBulkPurchaseModalOpen] = useState(false);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [approvalInvoice, setApprovalInvoice] = useState(null);
+    const [approvalTransaction, setApprovalTransaction] = useState(null);
+    const [isDeductionModalOpen, setIsDeductionModalOpen] = useState(false);
     const [historyItem, setHistoryItem] = useState(null);
     const [activeTab, setActiveTab] = useState('raw_materials');
     const { role } = getAuthStatus()?.user || 'accountant';
@@ -169,6 +173,14 @@ const Inventory = () => {
                             <span className="material-symbols-outlined text-base">shopping_cart_checkout</span>
                             <span className="truncate">Bulk Purchase</span>
                         </button>
+                        {role === 'admin' && activeTab === 'raw_materials' && (
+                            <button
+                                onClick={() => setIsDeductionModalOpen(true)}
+                                className="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 border border-red-500 text-red-500 bg-white dark:bg-background-dark dark:border-red-900 gap-2 text-sm font-bold leading-normal tracking-[0.015em] min-w-0 px-4 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors">
+                                <span className="material-symbols-outlined text-base">remove_shopping_cart</span>
+                                <span className="truncate">Deduct Stock</span>
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -266,6 +278,50 @@ const Inventory = () => {
                                     </div>
                                 </div>
                             )}
+                        </div>
+                    </div>
+                )}
+                {role === 'admin' && (filteredPending.length > 0) && (
+                    <div className="mb-8">
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                            <span className="material-symbols-outlined text-orange-500">pending_actions</span>
+                            Pending Single Transactions / Deductions
+                        </h2>
+                        <div className="overflow-hidden rounded-lg border border-orange-200 bg-orange-50 dark:bg-orange-900/10 dark:border-orange-800">
+                            <table className="w-full text-left">
+                                <thead className="bg-orange-100 dark:bg-orange-900/20">
+                                    <tr className="border-b border-orange-200 dark:border-orange-800">
+                                        <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Item</th>
+                                        <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Quantity</th>
+                                        <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Supplier</th>
+                                        <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Date</th>
+                                        <th className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-gray-300">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-orange-200 dark:divide-orange-800">
+                                    {filteredPending.map((entry) => (
+                                        <tr key={entry.id}>
+                                            <td className="px-4 py-3 text-slate-900 dark:text-white text-sm font-bold">
+                                                {entry.item?.name || entry.item}
+                                                {entry.quantity < 0 && (
+                                                    <span className="ml-2 text-xs font-semibold text-red-500 uppercase tracking-wide bg-red-100 dark:bg-red-900/30 px-2 py-0.5 rounded-full">Deduction</span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">{entry.quantity} {entry.item?.unit || ''}</td>
+                                            <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">{entry.supplier_name || entry.supplier?.name || '-'}</td>
+                                            <td className="px-4 py-3 text-slate-500 dark:text-gray-400 text-sm">{new Date(entry.transaction_date).toLocaleDateString()}</td>
+                                            <td className="px-4 py-3 text-sm">
+                                                <button
+                                                    onClick={() => setApprovalTransaction(entry)}
+                                                    className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold bg-eva-blue text-white hover:bg-blue-800 transition-colors"
+                                                >
+                                                    Approve
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 )}
@@ -403,6 +459,17 @@ const Inventory = () => {
                 onClose={() => setHistoryItem(null)}
                 item={historyItem}
                 role={role}
+            />
+
+            <ApprovalModal
+                isOpen={!!approvalTransaction}
+                onClose={() => setApprovalTransaction(null)}
+                entry={approvalTransaction}
+            />
+
+            <DeductionModal
+                isOpen={isDeductionModalOpen}
+                onClose={() => setIsDeductionModalOpen(false)}
             />
         </div>
     );
