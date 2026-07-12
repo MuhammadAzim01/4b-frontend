@@ -281,7 +281,9 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                                         >
                                             <option value="">Select Product</option>
                                             {products?.results?.map(p => (
-                                                <option key={p.id} value={p.id}>{p.name} (Avl: {p.available_quantity})</option>
+                                                <option key={p.id} value={p.id}>
+                                                    {p.name} (Avl: {p.pack_size ? `${(Number(p.available_quantity) / p.pack_size).toFixed(1)} packs` : `${p.available_quantity} units`})
+                                                </option>
                                             ))}
                                         </select>
                                         <input
@@ -356,7 +358,9 @@ const CreateInvoiceModal = ({ isOpen, onClose, onSubmit, distributor }) => {
                                                 >
                                                     <option value="">Select Product</option>
                                                     {products?.results?.map(p => (
-                                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                                        <option key={p.id} value={p.id}>
+                                                            {p.name} (Avl: {p.pack_size ? `${(Number(p.available_quantity) / p.pack_size).toFixed(1)} packs` : `${p.available_quantity} units`})
+                                                        </option>
                                                     ))}
                                                 </select>
                                                 <input

@@ -5,6 +5,7 @@ const CreateProductModal = ({ isOpen, onClose, onCreate }) => {
     const [name, setName] = useState('');
     const [sku, setSku] = useState('');
     const [price, setPrice] = useState('');
+    const [packSize, setPackSize] = useState(6);
     const [description, setDescription] = useState('');
 
     const handleSubmit = (e) => {
@@ -13,6 +14,7 @@ const CreateProductModal = ({ isOpen, onClose, onCreate }) => {
             name,
             sku,
             unit_price: price ? parseFloat(price) : 0,
+            pack_size: packSize ? parseInt(packSize, 10) : 6,
             description
         });
 
@@ -20,6 +22,7 @@ const CreateProductModal = ({ isOpen, onClose, onCreate }) => {
         setName('');
         setSku('');
         setPrice('');
+        setPackSize(6);
         setDescription('');
     };
 
@@ -80,6 +83,23 @@ const CreateProductModal = ({ isOpen, onClose, onCreate }) => {
                                     placeholder="0.00"
                                 />
                             </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                Pack Size <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                required
+                                type="number"
+                                min="1"
+                                value={packSize}
+                                onChange={(e) => setPackSize(e.target.value)}
+                                className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary outline-none"
+                                placeholder="6"
+                            />
                         </div>
                     </div>
 

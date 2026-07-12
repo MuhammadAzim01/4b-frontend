@@ -9,6 +9,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { getAuthStatus } from '../utils/auth';
 import { openPrintWindow, fetchAllPages } from '../utils/printWindow';
 import { generateWarehouseLedgerHtml } from '../utils/warehouseLedgerPrint';
+import { generateWarehouseStockHtml } from '../utils/warehouseStockPrint';
 import { toast } from 'sonner';
 
 const Warehouse = () => {
@@ -38,6 +39,7 @@ const Warehouse = () => {
     const [ledgerEndDate, setLedgerEndDate] = useState('');
     const [ledgerTxType, setLedgerTxType] = useState('all'); // 'all', 'in', 'out'
     const [isPrintingLedger, setIsPrintingLedger] = useState(false);
+    const [isPrintingAllStock, setIsPrintingAllStock] = useState(false);
 
     const { role } = getAuthStatus()?.user || {};
     const isAdmin = role === 'admin';
@@ -54,6 +56,21 @@ const Warehouse = () => {
     // Construct Query Params
     const getQueryParams = () => {
         let params = `?page=${page}&page_size=${pageSize}&search=${debouncedSearch}`;
+
+        if (filterType === 'as_of') {
+            if (asOfDate) params += `&date=${asOfDate}`;
+        } else {
+            params += `&date_range=${filterType}`;
+            if (filterType === 'custom') {
+                if (customStartDate) params += `&start_date=${customStartDate}`;
+                if (customEndDate) params += `&end_date=${customEndDate}`;
+            }
+        }
+        return params;
+    };
+
+    const getPrintQueryParams = () => {
+        let params = `?page_size=1000&search=${debouncedSearch}`;
 
         if (filterType === 'as_of') {
             if (asOfDate) params += `&date=${asOfDate}`;
@@ -185,6 +202,29 @@ const Warehouse = () => {
         }
     };
 
+    const handlePrintAllStock = async () => {
+        setIsPrintingAllStock(true);
+        try {
+            const allProducts = await fetchAllPages(
+                fetchWithAuth,
+                `warehouse/products/${getPrintQueryParams()}`
+            );
+            const html = generateWarehouseStockHtml({
+                products: allProducts,
+                filterType,
+                asOfDate,
+                startDate: customStartDate,
+                endDate: customEndDate,
+            });
+            openPrintWindow(html);
+        } catch (error) {
+            console.error("Failed to print warehouse stock:", error);
+            toast.error('Failed to prepare warehouse stock report for printing');
+        } finally {
+            setIsPrintingAllStock(false);
+        }
+    };
+
     const products = productsData?.results || [];
     const totalPages = Math.ceil((productsData?.count || 0) / pageSize);
 
@@ -197,6 +237,13 @@ const Warehouse = () => {
                     <p className="text-slate-500 dark:text-gray-400 text-base font-normal leading-normal">Real-time inventory levels and immutable transaction ledger.</p>
                 </div>
                 <div className="flex gap-2">
+                    <button
+                        onClick={handlePrintAllStock}
+                        disabled={isPrintingAllStock}
+                        className="flex h-10 items-center justify-center gap-x-2 rounded-lg border border-slate-300 dark:border-gray-700 bg-white dark:bg-background-dark px-4 hover:bg-slate-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-50">
+                        <span className="material-symbols-outlined text-base">print</span>
+                        <p className="text-sm font-medium">{isPrintingAllStock ? 'Preparing...' : 'Print Stock Report'}</p>
+                    </button>
                     <button
                         onClick={() => setIsCreateProductModalOpen(true)}
                         className="flex h-10 items-center justify-center gap-x-2 rounded-lg border border-slate-300 dark:border-gray-700 bg-white dark:bg-background-dark px-4 hover:bg-slate-50 dark:hover:bg-gray-800 transition-colors">
