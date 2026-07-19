@@ -3,9 +3,15 @@ import { useNotifications } from '../../context/NotificationContext';
 import { Link } from 'react-router-dom';
 
 const NotificationBell = () => {
-    const { notifications, unreadCount, markAsRead } = useNotifications();
+    const { notifications, unreadCount, markAsRead, refresh } = useNotifications();
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef(null);
+
+    useEffect(() => {
+        if (refresh) {
+            refresh();
+        }
+    }, []);
 
     const toggleDropdown = () => {
         if (!isOpen) {

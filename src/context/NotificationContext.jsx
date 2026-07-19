@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { fetchWithAuth } from '../utils/fetchApis';
+import { getAuthStatus } from '../utils/auth';
 
 const NotificationContext = createContext();
 
@@ -11,6 +12,9 @@ export const NotificationProvider = ({ children }) => {
     const [loading, setLoading] = useState(false);
 
     const fetchNotifications = async () => {
+        const { isAuthenticated } = getAuthStatus();
+        if (!isAuthenticated) return;
+
         setLoading(true);
         const newNotifications = [];
 
